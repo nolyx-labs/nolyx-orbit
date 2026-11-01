@@ -14,7 +14,7 @@ export interface Org {
 }
 
 export interface Me {
-  user: { id: string; email: string; name: string }
+  user: { id: string; email: string; name: string; mfa_enabled: boolean }
   orgs: Org[]
 }
 

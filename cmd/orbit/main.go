@@ -4,6 +4,7 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
@@ -22,7 +23,7 @@ func main() {
 		DatabaseURL:          os.Getenv("DATABASE_URL"),
 		AppURL:               strings.TrimSuffix(env("APP_URL", "http://localhost:8080"), "/"),
 		EncryptionKey:        os.Getenv("ENCRYPTION_KEY"),
-		AllowSignup:          env("ALLOW_SIGNUP", "true") == "true",
+		AllowSignup:          os.Getenv("ALLOW_SIGNUP") == "true",
 		AllowPrivateWebhooks: os.Getenv("ALLOW_PRIVATE_WEBHOOKS") == "true",
 		AgentDist:            env("AGENT_DIST", "/opt/orbit/agents"),
 		Web:                  web.Dist(),
@@ -34,6 +35,17 @@ func main() {
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+
+	// orbit reset-password <email>: account recovery for an operator, e.g. a lost 2FA device and no email set up.
+	if len(os.Args) == 3 && os.Args[1] == "reset-password" {
+		link, err := server.RecoveryLink(ctx, cfg, os.Args[2])
+		if err != nil {
+			log.Error("reset-password failed", "err", err)
+			os.Exit(1)
+		}
+		fmt.Println("Open this link within an hour to set a new password. It also turns off two-factor authentication:\n" + link)
+		return
+	}
 
 	s, err := server.New(ctx, cfg, log)
 	if err != nil {

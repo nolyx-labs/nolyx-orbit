@@ -4,6 +4,7 @@ export class ApiError extends Error {
   constructor(
     public status: number,
     message: string,
+    public data: any = {},
   ) {
     super(message)
   }
@@ -24,7 +25,7 @@ export async function api<T = any>(method: string, path: string, body?: unknown)
   if (res.status === 401 && !path.startsWith('/auth/')) {
     window.location.href = '/login?next=' + encodeURIComponent(window.location.pathname)
   }
-  if (!res.ok) throw new ApiError(res.status, data.error ?? res.statusText)
+  if (!res.ok) throw new ApiError(res.status, data.error ?? res.statusText, data)
   return data as T
 }
 

@@ -61,7 +61,9 @@ Next, decide how people will reach Orbit (below) and set `APP_URL`. Then start i
 docker compose up -d --build
 ```
 
-Open `APP_URL/signup` and create the first account. The first account becomes the owner. Then set `ALLOW_SIGNUP=false` in `.env`, run `docker compose up -d` again, and add everyone else from **Security → Access → Invite**.
+Open `APP_URL/signup` and create the first account. The first account becomes the owner. After that, sign-up is closed: add everyone else from **Security → Access → Invite**. Invited people can create an account from their invitation link.
+
+Turn on two-factor authentication for your account in **Settings → Account**.
 
 ---
 
@@ -238,9 +240,9 @@ All settings live in `.env`. After changing them, run `docker compose up -d` (ad
 | `ORBIT_BIND` | `0.0.0.0` | Interface port 8080 listens on. Use `127.0.0.1` behind a proxy. |
 | `ORBIT_PORT` | `8080` | Host port for the control plane. |
 | `POSTGRES_PASSWORD` | `orbit` | Password for the bundled database. Set it before the first start. |
-| `ALLOW_SIGNUP` | `true` | Open registration. Turn it off after creating the owner account. |
-| `ALLOW_PRIVATE_WEBHOOKS` | `true` | Let alert webhooks reach private IP addresses. |
-| `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_FROM` | — | Email for alerts and invitations. |
+| `ALLOW_SIGNUP` | `false` | Open registration to anyone. The first account and invited people can always sign up. |
+| `ALLOW_PRIVATE_WEBHOOKS` | `false` | Let alert webhooks reach private IP addresses (e.g. an on-prem chat server). Off by default so members can't use webhooks to reach internal services. |
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_FROM` | — | Email for alerts, invitations and password resets. |
 
 **Agent settings** go in `/etc/orbit-agent/env` on each server:
 
@@ -275,6 +277,13 @@ The server keeps its identity; no re-enrollment is needed.
 
 **Live updates stop behind your own proxy.**
 - Turn off response buffering for `/api/v1/projects/*/stream` and allow WebSocket upgrades for `/agent/v1/connect`. See [Option C](#option-c-your-own-reverse-proxy).
+
+**Someone is locked out (forgot their password, or lost their 2FA device and recovery codes).**
+- With email configured, they can use **Forgot password?** on the sign-in page. That still asks for their 2FA code.
+- Otherwise, run `docker compose exec orbit orbit reset-password them@example.com` and send them the link. It's valid for an hour and also turns off their two-factor authentication.
+
+**"Too many failed sign-in attempts".**
+- After 10 failures for one email, or 50 from one IP address, sign-in is paused for 15 minutes. Restarting the control plane clears it.
 
 **Logs to check:**
 - Control plane: `docker compose logs -f orbit`

@@ -41,6 +41,8 @@ type Server struct {
 	signer ed25519.PrivateKey // command signing; agents pin the public key at enrollment
 	hub    *Hub
 	log    *slog.Logger
+
+	attempts attempts // failed sign-ins etc., see limit.go
 }
 
 //go:embed migrations/*.sql

@@ -8,6 +8,11 @@ func (s *Server) routes(mux *http.ServeMux) {
 	auth := func(pattern string, fn handlerFunc) { api.Handle(pattern, s.h(fn)) }
 
 	auth("GET /api/v1/me", s.me)
+	auth("POST /api/v1/account/password", s.changePassword)
+	auth("POST /api/v1/account/mfa/setup", s.mfaSetup)
+	auth("POST /api/v1/account/mfa/enable", s.mfaEnable)
+	auth("POST /api/v1/account/mfa/disable", s.mfaDisable)
+	auth("POST /api/v1/account/mfa/recovery-codes", s.mfaRecoveryCodes)
 	auth("POST /api/v1/orgs/{oid}/projects", s.createProject)
 	auth("GET /api/v1/orgs/{oid}/audit", s.auditLog)
 	auth("GET /api/v1/projects/{pid}/overview", s.overview)
@@ -98,6 +103,8 @@ func (s *Server) routes(mux *http.ServeMux) {
 	mux.Handle("POST /api/v1/auth/signup", s.h(s.signup))
 	mux.Handle("POST /api/v1/auth/login", s.h(s.login))
 	mux.Handle("POST /api/v1/auth/logout", s.h(s.logout))
+	mux.Handle("POST /api/v1/auth/password-reset", s.h(s.requestPasswordReset))
+	mux.Handle("POST /api/v1/auth/password-reset/confirm", s.h(s.confirmPasswordReset))
 	mux.Handle("GET /api/v1/invites/{token}", s.h(s.getInvite))
 	mux.Handle("POST /hooks/github/{aid}", s.h(s.githubWebhook))
 	mux.Handle("POST /agent/v1/enroll", s.h(s.enroll))

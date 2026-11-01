@@ -4,6 +4,7 @@ import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { Shell } from './components/layout/Shell'
 import { Auth } from './pages/auth/Auth'
 import { InviteAccept } from './pages/auth/InviteAccept'
+import { ResetPassword } from './pages/auth/ResetPassword'
 import { Backups } from './pages/databases/Backups'
 import { DatabaseDetail } from './pages/databases/DatabaseDetail'
 import { Databases } from './pages/databases/Databases'
@@ -28,6 +29,7 @@ import { Servers } from './pages/servers/Servers'
 import { NewService } from './pages/services/NewService'
 import { ServiceDetail } from './pages/services/ServiceDetail'
 import { Services } from './pages/services/Services'
+import { Account } from './pages/settings/Account'
 import { Agents } from './pages/settings/Agents'
 import { OrganizationSettings } from './pages/settings/OrganizationSettings'
 import { ProjectsSettings } from './pages/settings/ProjectsSettings'
@@ -45,6 +47,8 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
         <Route path="/login" element={<Auth mode="login" />} />
         <Route path="/signup" element={<Auth mode="signup" />} />
         <Route path="/invite/:token" element={<InviteAccept />} />
+        <Route path="/forgot-password" element={<ResetPassword />} />
+        <Route path="/reset-password/:token" element={<ResetPassword />} />
         <Route path="/p/:pid" element={<Shell />}>
           <Route index element={<Navigate to="overview" replace />} />
           <Route path="overview" element={<Overview />} />
@@ -76,6 +80,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
           <Route path="api-keys" element={<ApiKeys />} />
           <Route path="settings/organization" element={<OrganizationSettings />} />
           <Route path="settings/projects" element={<ProjectsSettings />} />
+          <Route path="settings/account" element={<Account />} />
         </Route>
         <Route path="*" element={<Shell />} />
       </Routes>

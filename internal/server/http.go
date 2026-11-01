@@ -108,12 +108,15 @@ func nilIfEmpty(s string) any {
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	s.routes(mux)
-	return securityHeaders(mux)
+	return securityHeaders(mux, strings.HasPrefix(s.cfg.AppURL, "https://"))
 }
 
-func securityHeaders(next http.Handler) http.Handler {
+func securityHeaders(next http.Handler, https bool) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		h := w.Header()
+		if https {
+			h.Set("Strict-Transport-Security", "max-age=31536000")
+		}
 		h.Set("X-Content-Type-Options", "nosniff")
 		h.Set("X-Frame-Options", "DENY")
 		h.Set("Referrer-Policy", "same-origin")

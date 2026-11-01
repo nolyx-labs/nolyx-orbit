@@ -41,8 +41,8 @@ services:
       DATABASE_URL: postgres://orbit:${POSTGRES_PASSWORD:-orbit}@postgres:5432/orbit?sslmode=disable
       APP_URL: ${APP_URL:-http://localhost:8080}
       ENCRYPTION_KEY: ${ENCRYPTION_KEY:?set ENCRYPTION_KEY in .env (openssl rand -hex 32)}
-      ALLOW_SIGNUP: ${ALLOW_SIGNUP:-true}
-      ALLOW_PRIVATE_WEBHOOKS: ${ALLOW_PRIVATE_WEBHOOKS:-true}
+      ALLOW_SIGNUP: ${ALLOW_SIGNUP:-false}
+      ALLOW_PRIVATE_WEBHOOKS: ${ALLOW_PRIVATE_WEBHOOKS:-false}
       SMTP_HOST: ${SMTP_HOST:-}
       SMTP_PORT: ${SMTP_PORT:-587}
       SMTP_USERNAME: ${SMTP_USERNAME:-}

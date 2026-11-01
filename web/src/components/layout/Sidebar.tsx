@@ -22,6 +22,7 @@ import {
   Server as ServerIcon,
   Sun,
   Tag,
+  UserRound,
   Users,
   type LucideIcon,
 } from 'lucide-react'
@@ -83,6 +84,7 @@ const NAV: { label: string; items: [string, string, LucideIcon][] }[] = [
       ['Organization', 'settings/organization', Building2],
       ['Projects', 'settings/projects', FolderKanban],
       ['Agents', 'settings/agents', Plug],
+      ['Account', 'settings/account', UserRound],
     ],
   },
 ]

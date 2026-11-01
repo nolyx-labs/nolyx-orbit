@@ -17,6 +17,8 @@ type credentials struct {
 	Email    string `json:"email"`
 	Password string `json:"password"`
 	Name     string `json:"name"`
+	Code     string `json:"code"`   // login: second factor
+	Invite   string `json:"invite"` // signup: an invite token lets people join when sign-up is closed
 }
 
 func (s *Server) signup(w http.ResponseWriter, r *http.Request) error {
@@ -24,19 +26,26 @@ func (s *Server) signup(w http.ResponseWriter, r *http.Request) error {
 	if err := decode(r, &c); err != nil {
 		return err
 	}
+	key := "signup:" + clientIP(r)
+	if s.attempts.blocked(key, 10) {
+		return errStatus(429, "too many sign-up attempts; try again in 15 minutes")
+	}
+	s.attempts.fail(key)
+	c.Email = strings.ToLower(strings.TrimSpace(c.Email))
 	if !s.cfg.AllowSignup {
-		var n int
-		s.db.QueryRow(r.Context(), `select count(*) from users`).Scan(&n)
-		if n > 0 { // the first user can always sign up so a fresh self-hosted install is usable
-			return errStatus(403, "sign up is disabled on this instance")
+		// The first user can always sign up so a fresh self-hosted install is usable.
+		var ok bool
+		s.db.QueryRow(r.Context(), `select not exists(select 1 from users) or exists(select 1 from invites
+			where token_hash = $1 and email = $2 and accepted_at is null and expires_at > now())`, hashToken(c.Invite), c.Email).Scan(&ok)
+		if !ok {
+			return errStatus(403, "sign up is disabled on this instance; ask an admin for an invitation")
 		}
 	}
-	c.Email = strings.ToLower(strings.TrimSpace(c.Email))
 	if _, err := mail.ParseAddress(c.Email); err != nil {
 		return errStatus(400, "invalid email")
 	}
-	if len(c.Password) < 10 || len(c.Password) > 72 {
-		return errStatus(400, "password must be 10–72 characters")
+	if err := validPassword(c.Password); err != nil {
+		return err
 	}
 	c.Name = strings.TrimSpace(c.Name)
 	if c.Name == "" {
@@ -75,19 +84,41 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) error {
 	if err := decode(r, &c); err != nil {
 		return err
 	}
+	email := strings.ToLower(strings.TrimSpace(c.Email))
+	ipKey, emailKey := "ip:"+clientIP(r), "email:"+email
+	if s.attempts.blocked(ipKey, 50) || s.attempts.blocked(emailKey, 10) {
+		return errStatus(429, "too many failed sign-in attempts; try again in 15 minutes")
+	}
 	var id, hash string
-	err := s.db.QueryRow(r.Context(), `select id::text, password_hash from users where email = $1`,
-		strings.ToLower(strings.TrimSpace(c.Email))).Scan(&id, &hash)
+	var mfa bool
+	err := s.db.QueryRow(r.Context(), `select id::text, password_hash, totp_enabled_at is not null from users where email = $1`,
+		email).Scan(&id, &hash, &mfa)
 	if err == pgx.ErrNoRows {
 		bcrypt.CompareHashAndPassword(dummyHash, []byte(c.Password)) // equalize timing so emails can't be enumerated
+		s.attempts.fail(ipKey, emailKey)
 		return errStatus(401, "invalid email or password")
 	}
 	if err != nil {
 		return err
 	}
 	if bcrypt.CompareHashAndPassword([]byte(hash), []byte(c.Password)) != nil {
+		s.attempts.fail(ipKey, emailKey)
 		return errStatus(401, "invalid email or password")
 	}
+	if mfa {
+		if c.Code == "" {
+			writeJSON(w, 401, map[string]any{"error": "enter the code from your authenticator app", "mfa_required": true})
+			return nil
+		}
+		if ok, err := s.verifyMFA(r.Context(), id, c.Code); err != nil {
+			return err
+		} else if !ok {
+			s.attempts.fail(ipKey, emailKey)
+			writeJSON(w, 401, map[string]any{"error": "invalid two-factor code", "mfa_required": true})
+			return nil
+		}
+	}
+	s.attempts.clear(emailKey)
 	return s.startSession(w, r, id)
 }
 
@@ -128,6 +159,10 @@ func (s *Server) me(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
-	writeJSON(w, 200, map[string]any{"user": map[string]string{"id": u.ID, "email": u.Email, "name": u.Name}, "orgs": orgs})
+	var mfa bool
+	if err := s.db.QueryRow(r.Context(), `select totp_enabled_at is not null from users where id = $1`, u.ID).Scan(&mfa); err != nil {
+		return err
+	}
+	writeJSON(w, 200, map[string]any{"user": map[string]any{"id": u.ID, "email": u.Email, "name": u.Name, "mfa_enabled": mfa}, "orgs": orgs})
 	return nil
 }

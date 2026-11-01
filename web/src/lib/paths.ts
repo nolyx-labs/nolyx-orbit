@@ -13,3 +13,9 @@ export function incidentLink(pid: string, i: { target_type: string; target_id: s
       return `/p/${pid}/servers/${i.server_id ?? i.target_id}/metrics`
   }
 }
+
+/** The ?next= redirect target, if it's a local path. `//host` and `/\host` would leave the site. */
+export const safeNext = (next: string | null) => (next && /^\/(?![/\\])/.test(next) ? next : '/')
+
+/** The invitation token when sign-up was reached from an invite link (/invite/:token). */
+export const inviteToken = (next: string) => next.match(/^\/invite\/([^/?#]+)/)?.[1]

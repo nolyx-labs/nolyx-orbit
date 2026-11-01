@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"net"
 	"net/http"
 	"time"
 )
@@ -13,7 +12,7 @@ import (
 // audit records a privileged operation. Failures are logged loudly but don't fail the request,
 // because the operation already happened.
 func (s *Server) audit(r *http.Request, orgID, projectID, actorID, actor, action, target string, meta map[string]any) {
-	ip, _, _ := net.SplitHostPort(r.RemoteAddr)
+	ip := clientIP(r)
 	m, _ := json.Marshal(meta)
 	if meta == nil {
 		m = []byte("{}")

@@ -62,6 +62,7 @@ func (s *Server) retention(ctx context.Context) {
 		`delete from app_metrics where ts < now() - interval '30 days'`,
 		`delete from log_lines where ts < now() - interval '7 days'`,
 		`delete from sessions where expires_at < now()`,
+		`delete from password_resets where expires_at < now()`,
 		`delete from events where created_at < now() - interval '90 days'`,
 		`delete from commands where created_at < now() - interval '90 days'`,
 		`delete from invites where expires_at < now() - interval '7 days'`,
