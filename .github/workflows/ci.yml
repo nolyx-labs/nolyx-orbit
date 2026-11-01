@@ -42,6 +42,8 @@ jobs:
       - run: npm run format:check
       - run: npm test
       - run: npm run build
+      - name: Email templates are compiled
+        run: npm run emails && test -z "$(git status --porcelain ../internal/server/emails)" || (echo "run: cd web && npm run emails" && exit 1)
 
   docker:
     runs-on: ubuntu-latest

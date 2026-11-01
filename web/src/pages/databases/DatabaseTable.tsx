@@ -1,4 +1,4 @@
-import { useNavigate } from 'react-router-dom'
+import { useNavigate } from 'react-router'
 import { useProject } from '../../components/layout/context'
 import { StatusText } from '../../components/ui/status'
 import { ago, bytes, num } from '../../lib/format'

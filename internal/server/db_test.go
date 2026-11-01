@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"log/slog"
+	"net/http"
 	"net/http/httptest"
 	"os"
 	"strings"
@@ -233,5 +234,65 @@ func TestSignupClosedExceptInvites(t *testing.T) {
 	}
 	if st := signup(email, token); st != 200 {
 		t.Fatalf("invitee couldn't sign up: %d", st)
+	}
+}
+
+func TestRequireMFA(t *testing.T) {
+	s := testServer(t)
+	ctx := context.Background()
+	admin, _ := newTestUser(t, s, "admin", "x")
+	inTeam, _ := newTestUser(t, s, "in-team", "x")
+	other, _ := newTestUser(t, s, "other", "x")
+	org := id(t, s, `insert into organizations (name) values ('t') returning id::text`)
+	p := id(t, s, `insert into projects (org_id, name) values ($1,'p') returning id::text`, org)
+	team := id(t, s, `insert into teams (org_id, name) values ($1,'ops') returning id::text`, org)
+	for _, uid := range []string{admin, inTeam, other} {
+		s.db.Exec(ctx, `insert into memberships values ($1,$2,'admin')`, org, uid)
+	}
+	s.db.Exec(ctx, `insert into team_members values ($1,$2)`, team, inTeam)
+
+	call := func(uid, method, oid, tid string, fn handlerFunc, body string) int {
+		r := httptest.NewRequest(method, "/", strings.NewReader(body))
+		r.Header.Set("Content-Type", "application/json")
+		r.SetPathValue("pid", p)
+		r.SetPathValue("oid", oid)
+		r.SetPathValue("tid", tid)
+		w := httptest.NewRecorder()
+		s.h(fn)(w, r.WithContext(context.WithValue(ctx, userKey, user{ID: uid})))
+		return w.Code
+	}
+	overview := func(uid string) int {
+		return call(uid, "GET", org, "", func(w http.ResponseWriter, r *http.Request) error {
+			_, err := s.projectAccess(r, "viewer")
+			return err
+		}, "")
+	}
+
+	// Requiring 2FA needs it on your own account first, so an admin can't lock themselves out.
+	if st := call(admin, "PATCH", org, "", s.updateOrg, `{"require_mfa":true}`); st != 400 {
+		t.Fatalf("admin without 2FA required it: %d", st)
+	}
+	enableMFA(t, s, admin)
+	if st := call(admin, "PUT", org, team, s.putTeam, `{"require_mfa":true,"user_ids":["`+inTeam+`"],"grants":[]}`); st != 204 {
+		t.Fatalf("team require_mfa: %d", st)
+	}
+	if overview(inTeam) != 403 || overview(other) != 200 {
+		t.Fatal("team requirement should block only its members")
+	}
+	if st := call(admin, "PATCH", org, "", s.updateOrg, `{"require_mfa":true}`); st != 204 {
+		t.Fatalf("org require_mfa: %d", st)
+	}
+	if overview(other) != 403 || overview(admin) != 200 {
+		t.Fatal("org requirement should block members without 2FA only")
+	}
+	if call(other, "GET", org, "", s.getOrg, "") != 403 {
+		t.Fatal("orgAccess ignored the requirement")
+	}
+	enableMFA(t, s, other)
+	if overview(other) != 200 {
+		t.Fatal("still blocked after turning 2FA on")
+	}
+	if st := call(other, "POST", org, "", s.mfaDisable, `{"password":"x","code":"000000"}`); st != 409 {
+		t.Fatalf("2FA turned off while the org requires it: %d", st)
 	}
 }

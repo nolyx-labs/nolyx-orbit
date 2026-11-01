@@ -12,6 +12,6 @@
     "isolatedModules": true,
     "types": ["vite/client"]
   },
-  "include": ["src"],
+  "include": ["src", "emails"],
   "exclude": ["src/**/*.test.ts"]
 }

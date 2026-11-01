@@ -1,0 +1,15 @@
+{{.AppURL}}
+
+Join {{.Org}} on Nolyx Orbit
+
+{{.Inviter}} invited you to the {{.Org}} organization as {{.Role}}. Accept to see its servers, services and databases.
+
+Accept invitation {{.Link}}
+
+This invitation expires in 7 days and only works for {{.Email}}.
+
+----------------------------------------
+
+If the "Accept invitation" button doesn't work, copy this link into your browser: {{.Link}}
+
+Sent by Nolyx Orbit at {{.AppURL}}

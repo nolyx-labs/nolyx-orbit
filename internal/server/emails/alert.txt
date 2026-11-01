@@ -1,0 +1,21 @@
+{{.AppURL}}
+
+{{.Status}}
+
+{{.Title}}
+
+Rule{{.Rule}}
+
+Target{{.Target}}
+
+Value{{.Value}}
+
+Time{{.Time}}
+
+View alerts {{.Link}}
+
+----------------------------------------
+
+If the "View alerts" button doesn't work, copy this link into your browser: {{.Link}}
+
+Sent by Nolyx Orbit at {{.AppURL}}

@@ -1,4 +1,4 @@
-import { Link } from 'react-router-dom'
+import { Link } from 'react-router'
 import { useProject } from '../../components/layout/context'
 import { Panel } from '../../components/ui/Panel'
 import { Empty, Loading } from '../../components/ui/states'

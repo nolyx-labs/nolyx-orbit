@@ -1,0 +1,7 @@
+{{.AppURL}}
+
+Your email channel works
+
+This is a test from the {{.Channel}} notification channel. Alerts that use it will arrive at this address.
+
+Sent by Nolyx Orbit at {{.AppURL}}

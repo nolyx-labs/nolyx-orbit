@@ -64,6 +64,7 @@ export function Access() {
                 <tr>
                   <th>Member</th>
                   <th>Role</th>
+                  <th>2FA</th>
                   <th>Teams</th>
                   <th />
                 </tr>
@@ -92,6 +93,7 @@ export function Access() {
                         <span className="mono">{m.role}</span>
                       )}
                     </td>
+                    <td>{m.mfa_enabled ? <Badge tone="ok">on</Badge> : <Badge>off</Badge>}</td>
                     <td className="muted">{m.teams.join(', ') || '—'}</td>
                     <td className="right">
                       {(canAdmin || m.id === me.user.id) && (
@@ -160,7 +162,9 @@ export function Access() {
                 <tbody>
                   {data.teams.map((t) => (
                     <tr key={t.id}>
-                      <td className="name">{t.name}</td>
+                      <td className="name">
+                        {t.name} {t.require_mfa && <Badge tone="info">2FA required</Badge>}
+                      </td>
                       <td className="muted">{t.members.map((m) => m.email).join(', ') || '—'}</td>
                       <td className="mono" style={{ fontSize: 12 }}>
                         {t.grants.map((g) => `${g.project}: ${g.role}`).join(' · ') || '—'}

@@ -1,5 +1,5 @@
 import { FormEvent, useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams } from 'react-router'
 import { BrandMark } from '../../components/ui/BrandMark'
 import { ErrorNote } from '../../components/ui/states'
 import { api } from '../../lib/api'

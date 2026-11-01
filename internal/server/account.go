@@ -114,6 +114,18 @@ func (s *Server) checkPassword(ctx context.Context, u user, password string) err
 	return nil
 }
 
+// requireOwnMFA stops an admin from requiring 2FA (and locking themselves out) before turning it on themselves.
+func (s *Server) requireOwnMFA(r *http.Request) error {
+	var on bool
+	if err := s.db.QueryRow(r.Context(), `select totp_enabled_at is not null from users where id = $1`, currentUser(r).ID).Scan(&on); err != nil {
+		return err
+	}
+	if !on {
+		return errStatus(400, "turn on two-factor authentication for your own account first (Settings → Account)")
+	}
+	return nil
+}
+
 func validPassword(p string) error {
 	if len(p) < 10 || len(p) > 72 {
 		return errStatus(400, "password must be 10–72 characters")
@@ -249,6 +261,14 @@ func (s *Server) mfaDisable(w http.ResponseWriter, r *http.Request) error {
 	if err := decode(r, &in); err != nil {
 		return err
 	}
+	var org string
+	err = s.db.QueryRow(r.Context(), `select o.name from memberships m join organizations o on o.id = m.org_id
+		where m.user_id = $1 and mfa_required(m.org_id, m.user_id) order by o.name limit 1`, u.ID).Scan(&org)
+	if err == nil {
+		return errStatus(409, "%s requires two-factor authentication, so it can't be turned off", org)
+	} else if err != pgx.ErrNoRows {
+		return err
+	}
 	if err := s.mfaGate(r, u, &in.Password, in.Code); err != nil {
 		return err
 	}
@@ -339,9 +359,7 @@ func (s *Server) requestPasswordReset(w http.ResponseWriter, r *http.Request) er
 		}
 		// Send in the background so the response time doesn't reveal whether the account exists.
 		go func() {
-			body := "Someone asked to reset the password for your Nolyx Orbit account.\n\n" + link +
-				"\n\nThe link expires in one hour. If it wasn't you, ignore this email.\n"
-			if err := s.sendEmail([]string{email}, "Reset your Nolyx Orbit password", body); err != nil {
+			if err := s.sendTemplate([]string{email}, "Reset your Nolyx Orbit password", "password-reset", map[string]string{"Link": link}); err != nil {
 				s.log.Warn("password reset email failed", "err", err)
 			}
 		}()

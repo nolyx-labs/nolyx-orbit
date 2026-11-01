@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router'
 import { useProject } from '../../components/layout/context'
 import { PageHead } from '../../components/ui/PageHead'
 import { Panel } from '../../components/ui/Panel'

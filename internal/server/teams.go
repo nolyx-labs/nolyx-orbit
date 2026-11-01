@@ -56,8 +56,9 @@ func (s *Server) putTeam(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	var in struct {
-		UserIDs []string `json:"user_ids"`
-		Grants  []struct {
+		RequireMFA bool     `json:"require_mfa"`
+		UserIDs    []string `json:"user_ids"`
+		Grants     []struct {
 			ProjectID string `json:"project_id"`
 			Role      string `json:"role"`
 		} `json:"grants"`
@@ -67,10 +68,19 @@ func (s *Server) putTeam(w http.ResponseWriter, r *http.Request) error {
 	}
 	tid := r.PathValue("tid")
 	var name string
-	if err := s.db.QueryRow(r.Context(), `select name from teams where org_id::text = $1 and id::text = $2`, oid, tid).Scan(&name); err != nil {
+	var requiredBefore bool
+	if err := s.db.QueryRow(r.Context(), `select name, require_mfa from teams where org_id::text = $1 and id::text = $2`, oid, tid).Scan(&name, &requiredBefore); err != nil {
 		return err
 	}
+	if in.RequireMFA && !requiredBefore {
+		if err := s.requireOwnMFA(r); err != nil {
+			return err
+		}
+	}
 	err = pgx.BeginFunc(r.Context(), s.db, func(tx pgx.Tx) error {
+		if _, err := tx.Exec(r.Context(), `update teams set require_mfa = $2 where id::text = $1`, tid, in.RequireMFA); err != nil {
+			return err
+		}
 		tx.Exec(r.Context(), `delete from team_members where team_id::text = $1`, tid)
 		tx.Exec(r.Context(), `delete from team_project_roles where team_id::text = $1`, tid)
 		for _, uid := range in.UserIDs {
@@ -100,7 +110,7 @@ func (s *Server) putTeam(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	u := currentUser(r)
-	s.audit(r, oid, "", u.ID, u.label(), "team.update", name, map[string]any{"members": len(in.UserIDs), "grants": in.Grants})
+	s.audit(r, oid, "", u.ID, u.label(), "team.update", name, map[string]any{"members": len(in.UserIDs), "grants": in.Grants, "require_mfa": in.RequireMFA})
 	w.WriteHeader(204)
 	return nil
 }

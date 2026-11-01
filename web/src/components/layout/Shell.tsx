@@ -1,5 +1,7 @@
-import { Navigate, Outlet, useParams } from 'react-router-dom'
+import { Link, Navigate, Outlet, useMatch, useParams } from 'react-router'
 import { useApi } from '../../lib/api'
+import { PageHead } from '../ui/PageHead'
+import { Panel } from '../ui/Panel'
 import { ErrorNote } from '../ui/states'
 import { Me, ProjectCtx } from './context'
 import { Sidebar } from './Sidebar'
@@ -7,6 +9,7 @@ import { Sidebar } from './Sidebar'
 export function Shell() {
   const { pid } = useParams()
   const [me, error, reloadMe] = useApi<Me>('/me')
+  const onAccount = useMatch('/p/:pid/settings/account')
   if (error)
     return (
       <div className="page">
@@ -25,7 +28,26 @@ export function Shell() {
       <div className="shell">
         <Sidebar />
         <main className="main">
-          <Outlet />
+          {org.mfa_blocked && !onAccount ? (
+            <div className="page">
+              <PageHead title="Two-factor authentication required" />
+              <Panel pad>
+                <div className="stack">
+                  <div>
+                    {org.name} requires two-factor authentication. Turn it on for your account to keep working in this
+                    organization.
+                  </div>
+                  <div>
+                    <Link className="btn primary" to={`/p/${project.id}/settings/account`}>
+                      Set up two-factor authentication
+                    </Link>
+                  </div>
+                </div>
+              </Panel>
+            </div>
+          ) : (
+            <Outlet />
+          )}
         </main>
       </div>
     </ProjectCtx.Provider>

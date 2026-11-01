@@ -10,6 +10,10 @@ export interface Org {
   id: string
   name: string
   role: string
+  /** The organization-wide setting. */
+  require_mfa: boolean
+  /** The org or one of my teams in it requires 2FA and I haven't turned it on: everything but my account is locked. */
+  mfa_blocked: boolean
   projects: Project[]
 }
 

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { useSearchParams } from 'react-router'
 import { useProject } from '../../components/layout/context'
 import { RANGES, Segmented } from '../../components/ui/controls'
 import { PageHead } from '../../components/ui/PageHead'

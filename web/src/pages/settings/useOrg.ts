@@ -2,13 +2,14 @@ import { useProject } from '../../components/layout/context'
 import { useApi } from '../../lib/api'
 
 export interface OrgData {
-  org: { id: string; name: string }
+  org: { id: string; name: string; require_mfa: boolean }
   role: string
-  members: { id: string; email: string; name: string; role: string; teams: string[] }[]
+  members: { id: string; email: string; name: string; role: string; mfa_enabled: boolean; teams: string[] }[]
   invites: { id: string; email: string; role: string; expires_at: string; invited_by: string }[]
   teams: {
     id: string
     name: string
+    require_mfa: boolean
     members: { id: string; email: string }[]
     grants: { project_id: string; project: string; role: string }[]
   }[]

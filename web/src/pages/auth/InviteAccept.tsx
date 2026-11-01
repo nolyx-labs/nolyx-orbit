@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams } from 'react-router'
 import { BrandMark } from '../../components/ui/BrandMark'
 import { ErrorNote, Loading } from '../../components/ui/states'
 import { api, useApi } from '../../lib/api'

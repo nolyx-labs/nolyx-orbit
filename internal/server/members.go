@@ -3,7 +3,6 @@ package server
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 	"net/mail"
 	"strings"
@@ -124,8 +123,8 @@ func (s *Server) createInvite(w http.ResponseWriter, r *http.Request) error {
 	link := s.cfg.AppURL + "/invite/" + token
 	var orgName string
 	s.db.QueryRow(r.Context(), `select name from organizations where id::text = $1`, oid).Scan(&orgName)
-	emailed := s.sendEmail([]string{in.Email}, "You're invited to "+orgName+" on Nolyx Orbit",
-		fmt.Sprintf("%s invited you to join %s on Nolyx Orbit as %s.\n\nAccept: %s\n\nThe link expires in 7 days.", currentUser(r).Email, orgName, in.Role, link)) == nil
+	emailed := s.sendTemplate([]string{in.Email}, "You're invited to "+orgName+" on Nolyx Orbit", "invite",
+		map[string]string{"Inviter": currentUser(r).Email, "Org": orgName, "Role": in.Role, "Email": in.Email, "Link": link}) == nil
 	u := currentUser(r)
 	s.audit(r, oid, "", u.ID, u.label(), "invite.create", in.Email, map[string]any{"role": in.Role})
 	writeJSON(w, 201, map[string]any{"link": link, "emailed": emailed})

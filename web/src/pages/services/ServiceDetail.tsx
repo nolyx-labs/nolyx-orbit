@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams } from 'react-router'
 import { Chart } from '../../components/charts/Chart'
 import { useCan, useProject } from '../../components/layout/context'
 import { Confirm } from '../../components/ui/Confirm'

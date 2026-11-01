@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router'
 import { useOrgCan, useProject } from '../../components/layout/context'
 import { Confirm } from '../../components/ui/Confirm'
 import { Dialog } from '../../components/ui/Dialog'

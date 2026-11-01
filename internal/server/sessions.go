@@ -148,7 +148,7 @@ func (s *Server) logout(w http.ResponseWriter, r *http.Request) error {
 func (s *Server) me(w http.ResponseWriter, r *http.Request) error {
 	u := currentUser(r)
 	orgs, err := s.list(r.Context(), `
-		select o.id, o.name, m.role,
+		select o.id, o.name, m.role, o.require_mfa, mfa_blocked(o.id, m.user_id) as mfa_blocked,
 		  (select coalesce(json_agg(json_build_object('id', p.id, 'name', p.name, 'role', greatest_role(m.role, (
 		     select max(case tpr.role when 'viewer' then 0 when 'member' then 1 when 'admin' then 2 end)
 		     from team_members tm join team_project_roles tpr on tpr.team_id = tm.team_id where tm.user_id = m.user_id and tpr.project_id = p.id)))

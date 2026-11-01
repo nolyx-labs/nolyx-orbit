@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate } from 'react-router'
 import { useProject } from '../../components/layout/context'
 import { Dialog } from '../../components/ui/Dialog'
 import { ErrorNote } from '../../components/ui/states'

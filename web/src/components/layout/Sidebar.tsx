@@ -27,7 +27,7 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
-import { NavLink, useNavigate } from 'react-router-dom'
+import { NavLink, useNavigate } from 'react-router'
 import { api } from '../../lib/api'
 import { Org, useProject } from './context'
 import { Check, Chevron } from './icons'

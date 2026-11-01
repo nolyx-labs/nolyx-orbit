@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link } from 'react-router'
 import { useProject } from '../../components/layout/context'
 import { Confirm } from '../../components/ui/Confirm'
 import { Dialog } from '../../components/ui/Dialog'

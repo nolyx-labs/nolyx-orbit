@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link } from 'react-router'
 import { Chart } from '../../components/charts/Chart'
 import { MetricCharts } from '../../components/charts/MetricCharts'
 import { useProject } from '../../components/layout/context'

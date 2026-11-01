@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate } from 'react-router'
 import { useCan, useProject } from '../../components/layout/context'
 import { Confirm } from '../../components/ui/Confirm'
 import { Panel } from '../../components/ui/Panel'

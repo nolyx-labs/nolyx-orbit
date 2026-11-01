@@ -22,12 +22,14 @@ export function TeamDialog({
   const [grants, setGrants] = useState<Record<string, string>>(
     Object.fromEntries(team?.grants.map((g) => [g.project_id, g.role]) ?? []),
   )
+  const [requireMfa, setRequireMfa] = useState(team?.require_mfa ?? false)
   const [error, setError] = useState<string>()
   const save = async () => {
     try {
       let id = team?.id
       if (!id) id = (await api<{ id: string }>('POST', `/orgs/${org.id}/teams`, { name })).id
       await api('PUT', `/orgs/${org.id}/teams/${id}`, {
+        require_mfa: requireMfa,
         user_ids: members,
         grants: Object.entries(grants)
           .filter(([, r]) => r)
@@ -115,6 +117,18 @@ export function TeamDialog({
           </tbody>
         </table>
         <span className="hint">A grant only raises access. A member's organization role is the floor.</span>
+      </div>
+      <div className="field">
+        <div className="checkbox-row">
+          <label>
+            <input type="checkbox" checked={requireMfa} onChange={(e) => setRequireMfa(e.target.checked)} />
+            Require two-factor authentication
+          </label>
+        </div>
+        <span className="hint">
+          Members of this team without two-factor authentication are locked out of the organization until they turn it
+          on.
+        </span>
       </div>
       <ErrorNote error={error} />
     </Dialog>

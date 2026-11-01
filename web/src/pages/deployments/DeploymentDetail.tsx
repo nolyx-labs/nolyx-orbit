@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useParams } from 'react-router'
 import { useProject } from '../../components/layout/context'
 import { StepList } from '../../components/Progress'
 import { PageHead } from '../../components/ui/PageHead'

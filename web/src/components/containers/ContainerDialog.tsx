@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link } from 'react-router'
 import { api, useApi } from '../../lib/api'
 import { bytes } from '../../lib/format'
 import { Container, Series } from '../../lib/types'

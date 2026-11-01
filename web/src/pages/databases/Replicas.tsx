@@ -1,4 +1,4 @@
-import { useNavigate } from 'react-router-dom'
+import { useNavigate } from 'react-router'
 import { useProject } from '../../components/layout/context'
 import { PageHead } from '../../components/ui/PageHead'
 import { Panel } from '../../components/ui/Panel'

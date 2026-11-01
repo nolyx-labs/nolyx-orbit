@@ -41,25 +41,33 @@ type project struct {
 	ID, OrgID, Role string
 }
 
+// errMFARequired: the organization, or one of the user's teams in it, requires 2FA and the user hasn't turned it on.
+// API keys are blocked too, since they act as their creator.
+var errMFARequired = errStatus(403, "this organization requires two-factor authentication: turn it on in Settings → Account")
+
 // projectAccess resolves {pid} and enforces access with at least minRole. This is the tenancy boundary.
 // Effective role = max(organization role, team grants on this project); API keys never exceed their own role.
 func (s *Server) projectAccess(r *http.Request, minRole string) (project, error) {
 	p := project{ID: r.PathValue("pid")}
 	u := currentUser(r)
 	var teamRank int
+	var blocked bool
 	err := s.db.QueryRow(r.Context(), `
-		select p.org_id::text, m.role, coalesce((
+		select p.org_id::text, m.role, mfa_blocked(p.org_id, m.user_id), coalesce((
 		  select max(case tpr.role when 'viewer' then 0 when 'member' then 1 when 'admin' then 2 end)
 		  from team_members tm join team_project_roles tpr on tpr.team_id = tm.team_id
 		  where tm.user_id = m.user_id and tpr.project_id = p.id), -1)
 		from projects p
 		join memberships m on m.org_id = p.org_id and m.user_id = $2
-		where p.id::text = $1`, p.ID, u.ID).Scan(&p.OrgID, &p.Role, &teamRank)
+		where p.id::text = $1`, p.ID, u.ID).Scan(&p.OrgID, &p.Role, &blocked, &teamRank)
 	if err == pgx.ErrNoRows {
 		return p, errStatus(404, "project not found")
 	}
 	if err != nil {
 		return p, err
+	}
+	if blocked {
+		return p, errMFARequired
 	}
 	if teamRank > roleRank[p.Role] {
 		p.Role = rankRole[teamRank]
@@ -80,11 +88,16 @@ func (s *Server) projectAccess(r *http.Request, minRole string) (project, error)
 func (s *Server) orgAccess(r *http.Request, minRole string) (string, string, error) {
 	oid, u := r.PathValue("oid"), currentUser(r)
 	var role string
-	err := s.db.QueryRow(r.Context(), `select role from memberships where org_id::text = $1 and user_id = $2`, oid, u.ID).Scan(&role)
+	var blocked bool
+	err := s.db.QueryRow(r.Context(), `select role, mfa_blocked(org_id, user_id) from memberships where org_id::text = $1 and user_id = $2`,
+		oid, u.ID).Scan(&role, &blocked)
 	if err == pgx.ErrNoRows {
 		return "", "", errStatus(404, "organization not found")
 	} else if err != nil {
 		return "", "", err
+	}
+	if blocked {
+		return "", "", errMFARequired
 	}
 	if k := u.Key; k != nil {
 		if k.OrgID != oid || k.ProjectID != "" {

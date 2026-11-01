@@ -1,4 +1,4 @@
-import { Link } from 'react-router-dom'
+import { Link } from 'react-router'
 import { useProject } from '../../components/layout/context'
 import { Empty } from '../../components/ui/states'
 import { StatusText, Tone } from '../../components/ui/status'

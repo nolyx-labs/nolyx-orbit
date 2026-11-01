@@ -57,6 +57,31 @@ export function OrganizationSettings() {
             {saved && <span className="faint">Saved</span>}
           </div>
         </Panel>
+        <Panel title="Security">
+          <div className="panel-body row">
+            <div style={{ flex: 1 }}>
+              <div style={{ fontWeight: 500 }}>Require two-factor authentication</div>
+              <div className="muted">
+                Members without it are locked out of {org.name} until they turn it on. You can also require it for
+                specific teams in Security → Access.
+              </div>
+            </div>
+            {canAdmin ? (
+              <button
+                className={org.require_mfa ? 'btn' : 'btn primary'}
+                onClick={() =>
+                  api('PATCH', `/orgs/${org.id}`, { require_mfa: !org.require_mfa }).then(reloadMe, (e) =>
+                    setError(e.message),
+                  )
+                }
+              >
+                {org.require_mfa ? 'Stop requiring' : 'Require'}
+              </button>
+            ) : (
+              <span className="faint">{org.require_mfa ? 'Required' : 'Not required'}</span>
+            )}
+          </div>
+        </Panel>
         {canAdmin && (
           <Panel
             title="Cloud accounts"

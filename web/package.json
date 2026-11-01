@@ -6,26 +6,29 @@
     "dev": "vite",
     "build": "tsc -b && vite build && touch dist/.gitkeep",
     "typecheck": "tsc -b",
+    "emails": "node emails/build.mjs",
     "test": "node --test 'src/**/*.test.ts'",
-    "format": "prettier --write \"src/**/*.{ts,tsx,css}\"",
-    "format:check": "prettier --check \"src/**/*.{ts,tsx,css}\""
+    "format": "prettier --write \"{src,emails}/**/*.{ts,tsx,css,mjs}\"",
+    "format:check": "prettier --check \"{src,emails}/**/*.{ts,tsx,css,mjs}\""
   },
   "dependencies": {
-    "@fontsource-variable/inter": "^5.1.0",
-    "@fontsource-variable/jetbrains-mono": "^5.1.1",
-    "lucide-react": "^0.460.0",
+    "@fontsource-variable/inter": "5.3.0",
+    "@fontsource-variable/jetbrains-mono": "5.3.0",
+    "lucide-react": "1.66.0",
     "qrcode-generator": "2.0.4",
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1",
-    "react-router-dom": "^6.28.0",
-    "uplot": "^1.6.31"
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "react-router": "8.5.1",
+    "uplot": "1.6.32"
   },
   "devDependencies": {
-    "@types/react": "^18.3.12",
-    "@types/react-dom": "^18.3.1",
-    "@vitejs/plugin-react": "^4.3.4",
-    "prettier": "^3.3.3",
-    "typescript": "^5.6.3",
-    "vite": "^5.4.11"
+    "@react-email/components": "1.0.12",
+    "@resvg/resvg-js": "2.6.2",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "@vitejs/plugin-react": "6.1.2",
+    "prettier": "3.9.10",
+    "typescript": "7.0.2",
+    "vite": "8.3.5"
   }
 }

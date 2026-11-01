@@ -1,4 +1,4 @@
-import { Link, NavLink, useParams } from 'react-router-dom'
+import { Link, NavLink, useParams } from 'react-router'
 import { useProject } from '../../components/layout/context'
 import { PageHead } from '../../components/ui/PageHead'
 import { Empty, Loading } from '../../components/ui/states'
