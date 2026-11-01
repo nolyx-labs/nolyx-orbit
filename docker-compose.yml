@@ -1,0 +1,96 @@
+# Nolyx Orbit (self-hosted).
+name: nolyx-orbit
+
+#   cp .env.example .env    # then set ENCRYPTION_KEY (openssl rand -hex 32)
+#   docker compose up -d    # → http://localhost:8080
+#
+# Data (database + agent identity) lives in the Docker volumes nolyx-orbit-postgres and
+# nolyx-orbit-agent. `docker compose up -d --build` keeps them. Never add -v to `down`
+# unless you want to erase everything.
+#
+# To connect this machine as a server, generate a token in Settings → Agents, then:
+#   ORBIT_TOKEN=orb_enr_... docker compose --profile agent up -d agent
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: orbit
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-orbit}
+      POSTGRES_DB: orbit
+    volumes:
+      - postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U orbit"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  orbit:
+    build: .
+    image: nolyx-orbit/control-plane:latest
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      # Behind the HTTPS proxy, set ORBIT_BIND=127.0.0.1 so 8080 isn't reachable from outside.
+      - "${ORBIT_BIND:-0.0.0.0}:${ORBIT_PORT:-8080}:8080"
+    environment:
+      DATABASE_URL: postgres://orbit:${POSTGRES_PASSWORD:-orbit}@postgres:5432/orbit?sslmode=disable
+      APP_URL: ${APP_URL:-http://localhost:8080}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:?set ENCRYPTION_KEY in .env (openssl rand -hex 32)}
+      ALLOW_SIGNUP: ${ALLOW_SIGNUP:-true}
+      ALLOW_PRIVATE_WEBHOOKS: ${ALLOW_PRIVATE_WEBHOOKS:-true}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USERNAME: ${SMTP_USERNAME:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_FROM: ${SMTP_FROM:-}
+
+  # Optional: an agent for this machine. Host networking so deploy health checks reach
+  # published ports on 127.0.0.1, exactly as on a real server.
+  agent:
+    profiles: [agent]
+    build:
+      context: .
+      dockerfile: Dockerfile.agent
+    image: nolyx-orbit/agent:latest
+    restart: unless-stopped
+    network_mode: host
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      ORBIT_URL: ${AGENT_ORBIT_URL:-http://host.docker.internal:8080}
+      ORBIT_TOKEN: ${ORBIT_TOKEN:-}
+      ORBIT_INSECURE: "1" # plain http is only acceptable for a local install
+      ORBIT_HOST_ROOT: /host
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /:/host:ro
+      - agent:/var/lib/orbit-agent
+
+  # Optional: automatic HTTPS with Let's Encrypt for ORBIT_DOMAIN.
+  #   docker compose --profile https up -d
+  caddy:
+    profiles: [https]
+    image: caddy:2.8
+    restart: unless-stopped
+    depends_on: [orbit]
+    command: caddy reverse-proxy --from ${ORBIT_DOMAIN:-} --to orbit:8080
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - caddy:/data
+
+# Fixed names so data survives rebuilds, restarts and compose project renames.
+volumes:
+  postgres:
+    name: nolyx-orbit-postgres
+  agent:
+    name: nolyx-orbit-agent
+  caddy:
+    name: nolyx-orbit-caddy

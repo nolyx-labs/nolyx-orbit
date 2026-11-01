@@ -1,0 +1,16 @@
+# Nolyx Orbit agent as a container (alternative to the systemd install).
+FROM golang:1.26-alpine AS go
+WORKDIR /src
+COPY go.mod go.sum ./
+RUN go mod download
+COPY internal/ internal/
+COPY cmd/orbit-agent/ cmd/orbit-agent/
+ARG VERSION=dev
+RUN CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X main.version=$VERSION" -o /out/orbit-agent ./cmd/orbit-agent
+
+# Runs as root: it needs the Docker socket and read access to the host's /proc.
+FROM gcr.io/distroless/static-debian12
+COPY --from=go /out/orbit-agent /usr/local/bin/orbit-agent
+ENV ORBIT_STATE=/var/lib/orbit-agent/state.json
+VOLUME /var/lib/orbit-agent
+ENTRYPOINT ["/usr/local/bin/orbit-agent"]
