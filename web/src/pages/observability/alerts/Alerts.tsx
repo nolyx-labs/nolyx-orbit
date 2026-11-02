@@ -10,7 +10,7 @@ import { api, useApi } from '../../../lib/api'
 import { ago } from '../../../lib/format'
 import { useLive } from '../../../lib/live'
 import { incidentLink } from '../../../lib/paths'
-import { Channel, Incident, METRICS, Rule } from './alertMetrics'
+import { Channel, Incident, METRICS, Rule, TIMELESS } from './alertMetrics'
 import { NewAlert } from './NewAlertDialog'
 import { NewChannel } from './NewChannelDialog'
 
@@ -107,9 +107,7 @@ export function Alerts() {
                       <td className="mono muted">
                         IF {m?.label ?? r.metric}
                         {m?.unit && ` > ${r.threshold}${m.unit}`}
-                        {r.metric !== 'deployment_failed' &&
-                          r.metric !== 'container_restarts' &&
-                          ` for ${r.duration_minutes}m`}
+                        {!TIMELESS.includes(r.metric) && ` for ${r.duration_minutes}m`}
                       </td>
                       <td className="muted">
                         {[...r.channel_ids.map(chName), ...(r.has_webhook ? ['webhook'] : [])].join(', ') ||

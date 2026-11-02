@@ -78,12 +78,14 @@ services:
     image: caddy:2.8
     restart: unless-stopped
     depends_on: [orbit]
-    command: caddy reverse-proxy --from ${ORBIT_DOMAIN:-} --to orbit:8080
+    environment:
+      ORBIT_DOMAIN: ${ORBIT_DOMAIN:-}
     ports:
       - "80:80"
       - "443:443"
       - "443:443/udp"
     volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy:/data
 
 # Fixed names so data survives rebuilds, restarts and compose project renames.

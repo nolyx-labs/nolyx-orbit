@@ -1,0 +1,309 @@
+{{/* Public status pages, laid out like Atlassian Statuspage. Light theme only, as Statuspage is. */}}
+
+{{define "head"}}<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{.}}</title>
+{{end}}
+
+{{define "style"}}
+<link rel="alternate" type="application/atom+xml" title="Incident history" href="{{.Base}}/history.atom">
+<style>
+  :root {
+    --brand: {{safeCSS .Page.Color}};
+    --text: #333333; --muted: #737373; --faint: #aaaaaa; --line: #e0e0e0; --soft: #f7f7f7;
+    --ok: #2fcc66; --degraded: #f1c40f; --partial: #e67e22; --major: #e74c3c; --maint: #3498db; --nodata: #b3bac5;
+    --impact-none: #333333; --impact-minor: #e3a008; --impact-major: #e67e22; --impact-critical: #e74c3c; --impact-maintenance: #3498db;
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body { margin: 0; background: #ffffff; color: var(--text); font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+  a { color: var(--brand); }
+  .wrap { max-width: 850px; margin: 0 auto; padding: 0 16px 40px; }
+  header.top { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; padding: 40px 0 36px; }
+  header.top .brand { color: var(--text); text-decoration: none; font-size: 26px; font-weight: 600; }
+  header.top img { max-height: 52px; max-width: 280px; display: block; }
+  .btn { display: inline-block; background: var(--brand); color: #fff; border: 0; border-radius: 4px; padding: 10px 18px; font: inherit; font-size: 13px;
+         font-weight: 600; letter-spacing: .04em; text-transform: uppercase; text-decoration: none; cursor: pointer; }
+  .btn:hover { filter: brightness(1.08); }
+  .btn:focus-visible, a:focus-visible, summary:focus-visible, .bar:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+  .description { color: var(--muted); margin: -16px 0 28px; }
+
+  .banner { border-radius: 4px; color: #fff; font-size: 20px; font-weight: 600; padding: 16px 20px; margin-bottom: 40px; }
+  .banner.none { background: var(--ok); } .banner.minor { background: var(--degraded); color: #3b3000; }
+  .banner.major { background: var(--partial); } .banner.critical { background: var(--major); } .banner.maintenance { background: var(--maint); }
+
+  .incident-box { border: 1px solid var(--c); border-radius: 4px; margin-bottom: 28px; overflow: hidden; }
+  .incident-box > h2 { margin: 0; background: var(--c); color: #fff; font-size: 17px; padding: 12px 20px; }
+  .incident-box > h2 a { color: inherit; text-decoration: none; }
+  .incident-box .updates { padding: 4px 20px; }
+  .impact-none { --c: var(--impact-none); } .impact-minor { --c: var(--impact-minor); } .impact-major { --c: var(--impact-major); }
+  .impact-critical { --c: var(--impact-critical); } .impact-maintenance { --c: var(--impact-maintenance); }
+  .update { padding: 14px 0; border-bottom: 1px solid var(--line); }
+  .update:last-child { border-bottom: 0; }
+  .update p { margin: 0 0 4px; white-space: pre-line; overflow-wrap: anywhere; }
+  .update small, small.meta { color: var(--muted); font-size: 13px; }
+
+  .uptime-note { display: flex; justify-content: flex-end; color: var(--muted); font-size: 13px; margin-bottom: 8px; }
+  .components { border: 1px solid var(--line); border-radius: 4px; margin-bottom: 48px; }
+  .component, .group > summary { padding: 18px 20px; border-bottom: 1px solid var(--line); }
+  .components > :last-child, .group[open] > .component:last-child { border-bottom: 0; }
+  .group:not([open]):last-child > summary { border-bottom: 0; }
+  .group > .component { padding-left: 40px; }
+  .row { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; }
+  .name { font-weight: 500; overflow-wrap: anywhere; }
+  .help { display: inline-block; width: 15px; height: 15px; border-radius: 50%; border: 1px solid var(--faint); color: var(--faint);
+          font-size: 10px; line-height: 13px; text-align: center; margin-left: 6px; cursor: help; vertical-align: 1px; }
+  .state { font-size: 14px; white-space: nowrap; }
+  .s-operational { color: var(--ok); } .s-degraded_performance { color: #c29d0b; } .s-partial_outage { color: var(--partial); }
+  .s-major_outage { color: var(--major); } .s-under_maintenance { color: var(--maint); }
+  .group > summary { list-style: none; cursor: pointer; }
+  .group > summary::-webkit-details-marker { display: none; }
+  .group > summary .name::before { content: "+"; display: inline-block; width: 18px; color: var(--muted); font-weight: 400; }
+  .group[open] > summary .name::before { content: "\2212"; }
+
+  .bars { display: flex; gap: 2px; height: 34px; margin-top: 10px; }
+  .bar { flex: 1; border-radius: 1px; position: relative; background: var(--ok); }
+  .bar.degraded, .bar.minor-incident { background: var(--degraded); } .bar.partial { background: var(--partial); }
+  .bar.major { background: var(--major); } .bar.nodata { background: var(--nodata); }
+  .bar:hover, .bar:focus { opacity: .7; }
+  .tip { display: none; position: absolute; bottom: calc(100% + 10px); left: 50%; transform: translateX(-50%); width: 240px; z-index: 5;
+         background: #fff; color: var(--text); border: 1px solid var(--line); border-radius: 4px; box-shadow: 0 4px 16px rgba(0,0,0,.12);
+         padding: 12px 14px; font-size: 13px; line-height: 1.45; pointer-events: none; }
+  .bar:hover .tip, .bar:focus .tip { display: block; }
+  .bar:nth-child(-n+12) .tip { left: 0; transform: none; } .bar:nth-last-child(-n+12) .tip { left: auto; right: 0; transform: none; }
+  .tip b { display: block; margin-bottom: 4px; } .tip ul { margin: 6px 0 0; padding-left: 16px; }
+  .legend { display: flex; align-items: center; gap: 12px; color: var(--muted); font-size: 12px; margin-top: 6px; }
+  .legend .rule { flex: 1; height: 1px; background: var(--line); }
+  .short { display: none; }
+  @media (max-width: 600px) {
+    .bar:nth-child(-n+60) { display: none; } .long { display: none; } .short { display: inline; }
+    .bar:nth-child(-n+64) .tip { left: 0; transform: none; }
+    header.top { padding: 28px 0; }
+  }
+
+  h2.section { font-size: 22px; font-weight: 500; margin: 0 0 20px; }
+  .day { margin-bottom: 28px; }
+  .day h3 { font-size: 16px; font-weight: 600; margin: 0 0 4px; padding-bottom: 8px; border-bottom: 1px solid var(--line); }
+  .day .none { color: var(--muted); margin: 12px 0 0; }
+  .past-incident { padding: 14px 0 0; }
+  .past-incident > a { color: var(--c); font-size: 17px; font-weight: 600; text-decoration: none; }
+  .past-incident .update { border: 0; padding: 8px 0; }
+  .month { border: 1px solid var(--line); border-radius: 4px; margin-bottom: 28px; }
+  .month h3 { margin: 0; padding: 14px 20px; border-bottom: 1px solid var(--line); font-size: 18px; }
+  .month .item { padding: 14px 20px; border-bottom: 1px solid var(--line); }
+  .month .item:last-child { border-bottom: 0; }
+  .month .item a { color: var(--c); font-weight: 600; text-decoration: none; }
+  .month .none { color: var(--muted); padding: 14px 20px; margin: 0; }
+  .pager { display: flex; justify-content: space-between; margin: 0 0 40px; }
+  .card { border: 1px solid var(--line); border-radius: 4px; padding: 24px; margin-bottom: 28px; }
+  .card h2 { margin: 0 0 8px; font-size: 20px; }
+  form.sub { display: flex; gap: 8px; flex-wrap: wrap; margin: 16px 0 8px; }
+  form.sub input { flex: 1 1 240px; min-width: 0; font: inherit; padding: 9px 12px; border: 1px solid #c8c8c8; border-radius: 4px; }
+  form.sub input:focus { outline: 2px solid var(--brand); outline-offset: -1px; border-color: transparent; }
+  footer.bottom { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; border-top: 1px solid var(--line); padding-top: 20px;
+                  color: var(--muted); font-size: 13px; }
+  footer.bottom a { color: var(--muted); }
+  @media (prefers-reduced-motion: no-preference) { .bar { transition: opacity .1s; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <a class="brand" href="{{if .Base}}{{.Base}}{{else}}/{{end}}">
+      {{if .Page.HasLogo}}<img src="{{.Base}}/logo" alt="{{.Page.Name}}">{{else}}{{.Page.Name}}{{end}}
+    </a>
+    <a class="btn" href="{{.Base}}/subscribe">Subscribe to updates</a>
+  </header>
+{{end}}
+
+{{define "footer"}}
+  <footer class="bottom">
+    <a href="{{.Base}}/history">&larr; Incident history</a>
+    <span>{{if .Page.SupportURL}}<a href="{{.Page.SupportURL}}">Contact support</a> · {{end}}Powered by Nolyx Orbit</span>
+  </footer>
+</div>
+<script src="/status-assets/local-time.js" defer></script>
+</body>
+</html>
+{{end}}
+
+{{define "updates"}}
+  {{range .}}
+  <div class="update">
+    <p><strong>{{label .Status}}</strong> - {{.Message}}</p>
+    <small><time datetime="{{iso .At}}">{{when .At}}</time></small>
+  </div>
+  {{end}}
+{{end}}
+
+{{define "bars"}}
+  <div class="bars" aria-label="Uptime over the past 90 days">
+    {{range .Days}}
+    <div class="bar {{.Class}}" tabindex="0" aria-label="{{day .Date}}: {{.Tip}}">
+      <div class="tip"><b><time datetime="{{iso .Date}}" data-format="day">{{day .Date}}</time></b>{{.Tip}}
+        {{if .Incidents}}<ul>{{range .Incidents}}<li>{{.}}</li>{{end}}</ul>{{end}}</div>
+    </div>
+    {{end}}
+  </div>
+  <div class="legend">
+    <span><span class="long">90 days ago</span><span class="short">30 days ago</span></span><span class="rule"></span>
+    <span>{{if .HasData}}{{pct .Uptime}} % uptime{{else}}No data yet{{end}}</span><span class="rule"></span><span>Today</span>
+  </div>
+{{end}}
+
+{{define "component"}}
+  <div class="component">
+    <div class="row">
+      <span class="name">{{.Name}}{{if .Description}}<span class="help" title="{{.Description}}" aria-label="{{.Description}}">?</span>{{end}}</span>
+      <span class="state s-{{.Status}}">{{label .Status}}</span>
+    </div>
+    {{template "bars" .}}
+  </div>
+{{end}}
+
+{{define "page"}}
+{{template "head" .Page.Name}}{{template "style" .}}
+  {{if .Page.Description}}<p class="description">{{.Page.Description}}</p>{{end}}
+
+  {{range .Active}}
+  <section class="incident-box impact-{{.Impact}}">
+    <h2><a href="{{$.Base}}/incidents/{{.ID}}">{{.Name}}</a></h2>
+    <div class="updates">{{template "updates" .Updates}}</div>
+  </section>
+  {{else}}
+  <div class="banner {{.Indicator}}">{{.Overall}}</div>
+  {{end}}
+
+  {{range .Maintenance}}
+  <section class="incident-box impact-maintenance">
+    <h2><a href="{{$.Base}}/incidents/{{.ID}}">{{.Name}}</a></h2>
+    <div class="updates">
+      {{if eq .Status "scheduled"}}<div class="update"><small>Scheduled for <time datetime="{{iso .ScheduledFor}}">{{when .ScheduledFor}}</time>
+        – <time datetime="{{iso .ScheduledUntil}}">{{when .ScheduledUntil}}</time></small></div>{{end}}
+      {{template "updates" .Updates}}
+    </div>
+  </section>
+  {{end}}
+
+  {{if .Groups}}
+  <div class="uptime-note">Uptime over the past <span class="long">&nbsp;90&nbsp;</span><span class="short">&nbsp;30&nbsp;</span> days</div>
+  <section class="components">
+    {{range .Groups}}
+      {{if .Name}}
+      <details class="group"{{if ne .Status "operational"}} open{{end}}>
+        <summary class="row"><span class="name">{{.Name}}</span><span class="state s-{{.Status}}">{{label .Status}}</span></summary>
+        {{range .Components}}{{template "component" .}}{{end}}
+      </details>
+      {{else}}{{range .Components}}{{template "component" .}}{{end}}{{end}}
+    {{end}}
+  </section>
+  {{end}}
+
+  <h2 class="section">Past incidents</h2>
+  {{range .Past}}
+  <div class="day">
+    <h3><time datetime="{{iso .Day}}" data-format="day">{{day .Day}}</time></h3>
+    {{range .Incidents}}
+    <div class="past-incident impact-{{.Impact}}">
+      <a href="{{$.Base}}/incidents/{{.ID}}">{{.Name}}</a>
+      {{template "updates" .Updates}}
+    </div>
+    {{else}}<p class="none">No incidents reported{{if eq (day .Day) (day $.Now)}} today{{end}}.</p>{{end}}
+  </div>
+  {{end}}
+{{template "footer" .}}
+{{end}}
+
+{{define "incident"}}
+{{template "head" (print .Incident.Name " · " .Page.Name)}}{{template "style" .}}
+  <section class="card impact-{{.Incident.Impact}}" style="border-top: 4px solid var(--c)">
+    <h2>{{.Incident.Name}}</h2>
+    <small class="meta">
+      {{if eq .Incident.Kind "maintenance"}}Scheduled maintenance · <time datetime="{{iso .Incident.ScheduledFor}}">{{when .Incident.ScheduledFor}}</time>
+        – <time datetime="{{iso .Incident.ScheduledUntil}}">{{when .Incident.ScheduledUntil}}</time>
+      {{else if .Incident.ResolvedAt}}This incident has been resolved.
+      {{else}}This incident is ongoing. Current status: {{label .Incident.Status}}.{{end}}
+    </small>
+    {{template "updates" .Incident.Updates}}
+    {{if .Incident.Components}}<p><small class="meta">This {{if eq .Incident.Kind "maintenance"}}maintenance{{else}}incident{{end}} affected:
+      {{range $i, $c := .Incident.Components}}{{if $i}}, {{end}}{{$c}}{{end}}.</small></p>{{end}}
+  </section>
+  <p><a class="btn" href="{{.Base}}/subscribe">Subscribe to updates</a></p>
+  <br>
+{{template "footer" .}}
+{{end}}
+
+{{define "history"}}
+{{template "head" (print "Incident history · " .Page.Name)}}{{template "style" .}}
+  <h2 class="section">Incident history</h2>
+  {{range .Months}}
+  <section class="month">
+    <h3>{{month .Month}}</h3>
+    {{range .Incidents}}
+    <div class="item impact-{{.Impact}}">
+      <a href="{{$.Base}}/incidents/{{.ID}}">{{.Name}}</a>
+      {{with index .Updates 0}}<p style="margin:4px 0">{{.Message}}</p>{{end}}
+      <small class="meta"><time datetime="{{iso .CreatedAt}}">{{when .CreatedAt}}</time>{{if .ResolvedAt}} – <time datetime="{{iso .ResolvedAt}}">{{when .ResolvedAt}}</time>{{end}}</small>
+    </div>
+    {{else}}<p class="none">No incidents reported this month.</p>{{end}}
+  </section>
+  {{end}}
+  <nav class="pager">
+    <a href="{{.Base}}/history?page={{.Older}}">&larr; Older</a>
+    {{if ge .Newer 0}}<a href="{{.Base}}/history?page={{.Newer}}">Newer &rarr;</a>{{end}}
+  </nav>
+{{template "footer" .}}
+{{end}}
+
+{{define "subscribe"}}
+{{template "head" (print "Subscribe · " .Page.Name)}}{{template "style" .}}
+  {{if .Page.EmailEnabled}}
+  <section class="card">
+    <h2>Email</h2>
+    <p class="meta" style="margin:0">Get an email whenever {{.Page.Name}} creates or updates an incident or maintenance.</p>
+    <form class="sub" method="post" action="{{.Base}}/subscribe">
+      <label for="email" style="position:absolute;left:-9999px">Email address</label>
+      <input id="email" name="email" type="email" placeholder="you@example.com" required autocomplete="email">
+      <button class="btn" type="submit">Subscribe</button>
+    </form>
+  </section>
+  {{end}}
+  <section class="card">
+    <h2>Webhook</h2>
+    <p class="meta" style="margin:0">We'll POST a JSON message to this URL for every incident update.</p>
+    <form class="sub" method="post" action="{{.Base}}/subscribe">
+      <label for="webhook" style="position:absolute;left:-9999px">Webhook URL</label>
+      <input id="webhook" name="webhook" type="url" placeholder="https://example.com/hooks/status" required>
+      <button class="btn" type="submit">Subscribe</button>
+    </form>
+  </section>
+  <section class="card">
+    <h2>Feeds</h2>
+    <p style="margin:0"><a href="{{.Base}}/history.atom">Atom feed</a> · <a href="{{.Base}}/history.rss">RSS feed</a> ·
+      <a href="{{.Base}}/api/v2/summary.json">JSON API</a></p>
+  </section>
+{{template "footer" .}}
+{{end}}
+
+{{define "unsubscribe"}}
+{{template "head" (print "Unsubscribe · " .Page.Name)}}{{template "style" .}}
+  <section class="card">
+    <h2>Unsubscribe from {{.Page.Name}}?</h2>
+    <p class="meta">You'll stop getting incident and maintenance updates.</p>
+    <form method="post" action="{{.Base}}/unsubscribe/{{.Token}}"><button class="btn" type="submit">Unsubscribe</button></form>
+  </section>
+{{template "footer" .}}
+{{end}}
+
+{{define "message"}}
+{{template "head" (print .Title " · " .Page.Name)}}{{template "style" .}}
+  <section class="card">
+    <h2>{{.Title}}</h2>
+    <p style="margin:0">{{.Message}}</p>
+  </section>
+  <p><a href="{{if .Base}}{{.Base}}{{else}}/{{end}}">&larr; Back to {{.Page.Name}}</a></p>
+{{template "footer" .}}
+{{end}}

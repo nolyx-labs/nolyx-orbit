@@ -9,7 +9,8 @@ What you can do with it:
 - **Deploy:** run Docker services with zero-downtime deploys, Git push-to-deploy, releases and rollbacks.
 - **Orchestrate:** run services across a Nomad cluster, or on a single server without Nomad.
 - **Databases:** monitor PostgreSQL, add read replicas, promote replicas, and schedule backups (including to S3).
-- **Observe:** metrics, searchable central logs, events and alerts sent by email, Slack, Discord or webhook.
+- **Observe:** metrics, searchable central logs, events, uptime monitors and alerts sent by email, Slack, Discord or webhook.
+- **Status pages:** public pages in the style of Atlassian Statuspage, with 90-day uptime, incidents, scheduled maintenance, email and webhook subscribers, feeds and custom domains.
 - **Secure:** secrets, API keys, teams with per-project roles, and an audit log of every action.
 - **Provision:** create new servers in Hetzner Cloud with the agent pre-installed.
 
@@ -105,6 +106,8 @@ Orbit ships with an optional [Caddy](https://caddyserver.com) proxy. Caddy gets 
 Open https://orbit.example.com. The first request can take a few seconds while the certificate is issued. If it fails, run `docker compose logs caddy`; the usual cause is DNS or port 80.
 
 Always include `--profile https` when you run `up`, so Caddy keeps running. Certificates are stored in the `nolyx-orbit-caddy` volume and survive restarts.
+
+Status pages can also have their own domain, such as `status.example.com`. Point a `CNAME` for it at `ORBIT_DOMAIN`, then enter it in the status page's **Settings → Custom domain**. Caddy issues its certificate on the first visit (see [Caddyfile](Caddyfile)). With your own proxy (Option C), route those domains to Orbit with their `Host` header intact.
 
 ### Option B: plain HTTP
 

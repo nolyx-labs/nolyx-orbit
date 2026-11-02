@@ -9,6 +9,8 @@ export function incidentLink(pid: string, i: { target_type: string; target_id: s
       return `/p/${pid}/services/${i.target_id}`
     case 'container':
       return `/p/${pid}/docker`
+    case 'monitor':
+      return `/p/${pid}/monitors/${i.target_id}`
     default:
       return `/p/${pid}/servers/${i.server_id ?? i.target_id}/metrics`
   }

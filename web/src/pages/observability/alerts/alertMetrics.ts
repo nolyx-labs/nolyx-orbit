@@ -73,4 +73,13 @@ export const METRICS: Record<string, { label: string; unit: '%' | 's' | ''; targ
     target: 'service',
     hint: 'Fires on a failed deploy, resolves on the next success',
   },
+  monitor_down: {
+    label: 'Monitor down',
+    unit: '',
+    target: 'monitor',
+    hint: 'Two failed checks in a row; resolves on the next success',
+  },
 }
+
+/** Metrics that fire on an event, so the rule has no duration. */
+export const TIMELESS = ['deployment_failed', 'container_restarts', 'monitor_down']

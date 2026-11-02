@@ -1,0 +1,17 @@
+{{.PageName}}
+
+{{.Status}}
+
+{{.Title}}
+
+{{.Message}}
+
+Affected{{.Components}}
+
+View incident {{.Link}}
+
+----------------------------------------
+
+If the "View incident" button doesn't work, copy this link into your browser: {{.Link}}
+
+You subscribed to updates from {{.PageName}}. Unsubscribe {{.Unsubscribe}}

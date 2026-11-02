@@ -12,6 +12,7 @@ func (s *Server) RunWorker(ctx context.Context) {
 	defer fast.Stop()
 	defer slow.Stop()
 	s.retention(ctx)
+	go s.runMonitors(ctx)
 	for {
 		select {
 		case <-ctx.Done():
@@ -19,6 +20,7 @@ func (s *Server) RunWorker(ctx context.Context) {
 		case <-fast.C:
 			s.markStale(ctx)
 			s.evaluateAlerts(ctx)
+			s.updateStatusPages(ctx)
 			s.scheduleBackups(ctx)
 			s.expireProvisions(ctx)
 		case <-slow.C:
@@ -61,6 +63,8 @@ func (s *Server) retention(ctx context.Context) {
 		`delete from database_metrics where ts < now() - interval '30 days'`,
 		`delete from app_metrics where ts < now() - interval '30 days'`,
 		`delete from log_lines where ts < now() - interval '7 days'`,
+		`delete from monitor_checks where ts < now() - interval '30 days'`,
+		`delete from status_subscribers where confirmed_at is null and created_at < now() - interval '7 days'`,
 		`delete from sessions where expires_at < now()`,
 		`delete from password_resets where expires_at < now()`,
 		`delete from events where created_at < now() - interval '90 days'`,

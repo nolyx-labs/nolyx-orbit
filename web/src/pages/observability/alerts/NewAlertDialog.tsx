@@ -3,7 +3,7 @@ import { useProject } from '../../../components/layout/context'
 import { Dialog } from '../../../components/ui/Dialog'
 import { ErrorNote } from '../../../components/ui/states'
 import { api } from '../../../lib/api'
-import { Channel, METRICS } from './alertMetrics'
+import { Channel, METRICS, TIMELESS } from './alertMetrics'
 
 export function NewAlert({
   channels,
@@ -36,7 +36,7 @@ export function NewAlert({
       setError(e.message)
     }
   }
-  const timeless = f.metric === 'deployment_failed' || f.metric === 'container_restarts'
+  const timeless = TIMELESS.includes(f.metric)
   return (
     <Dialog
       title="New alert"
@@ -66,7 +66,7 @@ export function NewAlert({
               setF({ ...f, metric: e.target.value, threshold: METRICS[e.target.value].unit === 's' ? '1' : '90' })
             }
           >
-            {['server', 'database', 'service', 'container'].map((t) => (
+            {['server', 'database', 'service', 'container', 'monitor'].map((t) => (
               <optgroup key={t} label={t[0].toUpperCase() + t.slice(1)}>
                 {Object.entries(METRICS)
                   .filter(([, v]) => v.target === t)

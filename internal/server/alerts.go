@@ -10,6 +10,7 @@ var alertMetrics = map[string]struct{ target, unit string }{
 	"cpu": {"server", "%"}, "memory": {"server", "%"}, "disk": {"server", "%"}, "io": {"server", "%"}, "offline": {"server", ""},
 	"replication_lag": {"database", "s"}, "db_connections": {"database", "%"}, "db_down": {"database", ""},
 	"error_rate": {"app", "%"}, "container_restarts": {"container", ""}, "deployment_failed": {"app", ""},
+	"monitor_down": {"monitor", ""},
 }
 
 // alertSQL yields one row per (rule, target): rule fields, target, current value and whether it breaches.
@@ -61,7 +62,19 @@ select r.id::text, r.name, r.metric, 0, r.webhook_url, r.channel_ids::text[], r.
   'container', c.server_id::text || '/' || c.docker_id, c.name, c.server_id::text, c.restart_count,
   c.state in ('restarting','dead') or c.health = 'unhealthy'
 from rules r join servers s on s.project_id = r.project_id join containers c on c.server_id = s.id
-where r.metric = 'container_restarts'`
+where r.metric = 'container_restarts'
+union all
+select r.id::text, r.name, r.metric, 0, r.webhook_url, r.channel_ids::text[], r.project_id::text,
+  'monitor', m.id::text, m.name, coalesce(m.server_id::text, ''), 0, m.status = 'down' and not m.paused
+from rules r join monitors m on m.project_id = r.project_id where r.metric = 'monitor_down'`
+
+// maintenanceSQL: servers and monitors under in-progress status page maintenance, and monitors on those servers.
+// Their alerts are held, neither opening nor resolving, until the window ends.
+const maintenanceSQL = `
+with t as (select c.source_id from status_incidents i
+  join status_incident_components ic on ic.incident_id = i.id join status_components c on c.id = ic.component_id
+  where i.kind = 'maintenance' and i.status = 'in_progress' and c.source_type in ('server','monitor'))
+select source_id::text from t union select id::text from monitors where server_id in (select source_id from t)`
 
 type alertState struct {
 	RuleID, Rule, Metric, Webhook, ProjectID   string
@@ -97,8 +110,19 @@ func (s *Server) evaluateAlerts(ctx context.Context) {
 		states = append(states, a)
 	}
 	rows.Close()
+	held := map[string]bool{}
+	if rows, err := s.db.Query(ctx, maintenanceSQL); err == nil {
+		for rows.Next() {
+			var id string
+			rows.Scan(&id)
+			held[id] = true
+		}
+		rows.Close()
+	}
 	for _, a := range states {
-		s.transition(ctx, a)
+		if !held[a.TargetID] && !held[a.ServerID] {
+			s.transition(ctx, a)
+		}
 	}
 }
 

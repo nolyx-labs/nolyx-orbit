@@ -1,0 +1,13 @@
+{{.PageName}}
+
+Confirm your subscription
+
+Confirm that you'd like to get an email whenever {{.PageName}} posts an incident or scheduled maintenance.
+
+Confirm subscription {{.Link}}
+
+----------------------------------------
+
+If the "Confirm subscription" button doesn't work, copy this link into your browser: {{.Link}}
+
+If you didn't ask for this, ignore this email and you won't be subscribed.

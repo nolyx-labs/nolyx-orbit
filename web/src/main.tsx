@@ -19,6 +19,8 @@ import { Events } from './pages/observability/Events'
 import { Logs } from './pages/observability/Logs'
 import { Metrics } from './pages/observability/Metrics'
 import { Alerts } from './pages/observability/alerts/Alerts'
+import { MonitorDetail } from './pages/monitors/MonitorDetail'
+import { Monitors } from './pages/monitors/Monitors'
 import { OperationPage } from './pages/operations/OperationPage'
 import { Overview } from './pages/overview/Overview'
 import { Access } from './pages/security/Access'
@@ -31,6 +33,8 @@ import { ServiceDetail } from './pages/services/ServiceDetail'
 import { Services } from './pages/services/Services'
 import { Account } from './pages/settings/Account'
 import { Agents } from './pages/settings/Agents'
+import { StatusPageDetail } from './pages/status/StatusPageDetail'
+import { StatusPages } from './pages/status/StatusPages'
 import { OrganizationSettings } from './pages/settings/OrganizationSettings'
 import { ProjectsSettings } from './pages/settings/ProjectsSettings'
 import './styles.css'
@@ -64,6 +68,11 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
           <Route path="metrics" element={<Metrics />} />
           <Route path="events" element={<Events />} />
           <Route path="alerts" element={<Alerts />} />
+          <Route path="monitors" element={<Monitors />} />
+          <Route path="monitors/:id" element={<MonitorDetail />} />
+          <Route path="status-pages" element={<StatusPages />} />
+          <Route path="status-pages/:id" element={<Navigate to="incidents" replace />} />
+          <Route path="status-pages/:id/:tab" element={<StatusPageDetail />} />
           <Route path="access" element={<Access />} />
           <Route path="settings/agents" element={<Agents />} />
           <Route path="clusters" element={<Clusters />} />

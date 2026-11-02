@@ -15,6 +15,9 @@ func TestEmailTemplates(t *testing.T) {
 		"invite":            {"Inviter": "ada@example.com", "Org": `Acme <script>alert(1)</script>`, "Role": "member", "Email": "bob@example.com", "Link": "https://orbit.example.com/invite/orb_inv_x"},
 		alert.template:      alert.data,
 		"test-notification": {"Channel": "On-call"},
+		"status-confirm":    {"PageName": "Acme", "Link": "https://status.acme.io/confirm/x"},
+		"status-update": {"PageName": "Acme", "Title": "API errors", "Status": "Investigating", "Color": "#dc2626",
+			"Message": "We're looking into it.", "Components": "API", "Link": "https://status.acme.io/incidents/1", "Unsubscribe": "https://status.acme.io/unsubscribe/x"},
 	} {
 		text, html, err := s.renderEmail(name, data)
 		if err != nil {

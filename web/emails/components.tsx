@@ -6,7 +6,18 @@ import { ReactNode } from 'react'
 const font = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif"
 const c = { canvas: '#edf2f7', ink: '#1a202c', text: '#4a5568', muted: '#a0aec0', line: '#e2e8f0', button: '#111113' }
 
-export function Layout({ preview, children }: { preview: string; children: ReactNode }) {
+/** brand/footer: emails sent on behalf of a status page carry its name instead of Orbit's logo and footer. */
+export function Layout({
+  preview,
+  children,
+  brand,
+  footer,
+}: {
+  preview: string
+  children: ReactNode
+  brand?: ReactNode
+  footer?: ReactNode
+}) {
   return (
     <Html lang="en">
       <Head />
@@ -14,16 +25,18 @@ export function Layout({ preview, children }: { preview: string; children: React
       <Body style={{ backgroundColor: c.canvas, fontFamily: font, margin: 0, padding: '0 12px' }}>
         <Container style={{ maxWidth: 570, width: '100%', margin: '0 auto' }}>
           <Section style={{ padding: '28px 0', textAlign: 'center' }}>
-            <Link href="{{.AppURL}}">
-              {/* Attached to each email by the server (emails.go), so it shows without loading remote images. */}
-              <Img
-                src="cid:logo"
-                width={200}
-                height={36}
-                alt="Nolyx Labs"
-                style={{ display: 'inline-block', margin: '0 auto' }}
-              />
-            </Link>
+            {brand ?? (
+              <Link href="{{.AppURL}}">
+                {/* Attached to each email by the server (emails.go), so it shows without loading remote images. */}
+                <Img
+                  src="cid:logo"
+                  width={200}
+                  height={36}
+                  alt="Nolyx Labs"
+                  style={{ display: 'inline-block', margin: '0 auto' }}
+                />
+              </Link>
+            )}
           </Section>
           <Section
             style={{
@@ -38,10 +51,14 @@ export function Layout({ preview, children }: { preview: string; children: React
           </Section>
           <Section style={{ padding: '28px 0', textAlign: 'center' }}>
             <Text style={{ color: c.muted, fontSize: 12, lineHeight: '18px', margin: 0 }}>
-              Sent by Nolyx Orbit at{' '}
-              <Link href="{{.AppURL}}" style={{ color: c.muted }}>
-                {'{{.AppURL}}'}
-              </Link>
+              {footer ?? (
+                <>
+                  Sent by Nolyx Orbit at{' '}
+                  <Link href="{{.AppURL}}" style={{ color: c.muted }}>
+                    {'{{.AppURL}}'}
+                  </Link>
+                </>
+              )}
             </Text>
           </Section>
         </Container>

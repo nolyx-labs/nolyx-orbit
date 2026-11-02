@@ -296,3 +296,90 @@ func TestRequireMFA(t *testing.T) {
 		t.Fatalf("2FA turned off while the org requires it: %d", st)
 	}
 }
+
+func TestMonitorUptime(t *testing.T) {
+	s := testServer(t)
+	ctx := context.Background()
+	org := id(t, s, `insert into organizations (name) values ('t') returning id::text`)
+	p := id(t, s, `insert into projects (org_id, name) values ($1,'p') returning id::text`, org)
+	mon := func(name string) string {
+		return id(t, s, `insert into monitors (project_id, name, type, target, created_at) values ($1,$2,'tcp','x:1', now() - interval '10 hours') returning id::text`, p, name)
+	}
+	healthy, flaky := mon("healthy"), mon("flaky")
+	// One hour down in the last ten, plus an older outage outside the window that mustn't count.
+	s.db.Exec(ctx, `insert into monitor_outages (monitor_id, started_at, ended_at) values
+		($1, now() - interval '3 hours', now() - interval '2 hours'), ($1, now() - interval '20 hours', now() - interval '19 hours')`, flaky)
+	for m, want := range map[string]float64{healthy: 100, flaky: 80} { // over the last 5 hours, flaky was down for 1
+		var got float64
+		if err := s.db.QueryRow(ctx, `select monitor_uptime($1, now() - interval '5 hours')`, m).Scan(&got); err != nil {
+			t.Fatal(err)
+		}
+		if got < want-0.01 || got > want+0.01 {
+			t.Errorf("uptime = %v, want %v", got, want)
+		}
+	}
+}
+
+func TestStatusComponents(t *testing.T) {
+	s := testServer(t)
+	ctx := context.Background()
+	org := id(t, s, `insert into organizations (name) values ('t') returning id::text`)
+	p := id(t, s, `insert into projects (org_id, name) values ($1,'p') returning id::text`, org)
+	mon := id(t, s, `insert into monitors (project_id, name, type, target, status) values ($1,'api','tcp','x:1','down') returning id::text`, p)
+	srv := id(t, s, `insert into servers (project_id, name, agent_secret_hash, status) values ($1,'web-1','x','offline') returning id::text`, p)
+	page := id(t, s, `insert into status_pages (project_id, name, slug) values ($1,'Acme','acme-`+newUUID()[:8]+`') returning id::text`, p)
+	comp := func(name, src string, sid any) string {
+		return id(t, s, `insert into status_components (page_id, name, source_type, source_id) values ($1,$2,$3,$4) returning id::text`, page, name, src, sid)
+	}
+	cMon, cSrv, cManual := comp("API", "monitor", mon), comp("Web", "server", srv), comp("Email", "manual", nil)
+	status := func(c string) (st string) {
+		s.db.QueryRow(ctx, `select status from status_components where id::text = $1`, c).Scan(&st)
+		return
+	}
+	expect := func(step string, want map[string]string) {
+		t.Helper()
+		s.updateStatusPages(ctx)
+		for c, w := range want {
+			if got := status(c); got != w {
+				t.Errorf("%s: component status = %s, want %s", step, got, w)
+			}
+		}
+	}
+	incident := func(kind, st string, comps map[string]string) string { // maintenance starts a minute ago, ends in an hour
+		iid := id(t, s, `insert into status_incidents (page_id, kind, name, impact, status, scheduled_for, scheduled_until)
+			values ($1, $2, 'x', case when $2 = 'maintenance' then 'maintenance' else 'major' end, $3,
+			  case when $2 = 'maintenance' then now() - interval '1 minute' end, case when $2 = 'maintenance' then now() + interval '1 hour' end)
+			returning id::text`, page, kind, st)
+		for c, cs := range comps {
+			s.db.Exec(ctx, `insert into status_incident_components values ($1,$2,$3)`, iid, c, cs)
+		}
+		return iid
+	}
+
+	expect("sources", map[string]string{cMon: "major_outage", cSrv: "major_outage", cManual: "operational"})
+
+	inc := incident("incident", "investigating", map[string]string{cManual: "partial_outage", cMon: "degraded_performance"})
+	expect("open incident", map[string]string{cManual: "partial_outage", cMon: "major_outage"}) // never hides a worse source status
+	s.db.Exec(ctx, `update status_incidents set status = 'resolved' where id::text = $1`, inc)
+	expect("resolved", map[string]string{cManual: "operational"})
+
+	// Scheduled maintenance whose start has passed begins on its own and shows instead of the server's outage.
+	m := incident("maintenance", "scheduled", map[string]string{cSrv: "under_maintenance"})
+	expect("maintenance", map[string]string{cSrv: "under_maintenance", cMon: "major_outage"})
+	var mst string
+	s.db.QueryRow(ctx, `select status from status_incidents where id::text = $1`, m).Scan(&mst)
+	if mst != "in_progress" {
+		t.Errorf("maintenance status = %s, want in_progress", mst)
+	}
+	var held bool
+	s.db.QueryRow(ctx, `select exists(`+maintenanceSQL+`)`).Scan(&held)
+	if !held {
+		t.Error("alerts aren't held for a server under maintenance")
+	}
+
+	var rows int
+	s.db.QueryRow(ctx, `select count(*) from status_component_history where component_id::text = $1`, cManual).Scan(&rows)
+	if rows != 3 { // operational → partial_outage → operational
+		t.Errorf("history rows = %d, want 3", rows)
+	}
+}

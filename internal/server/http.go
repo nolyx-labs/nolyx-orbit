@@ -108,7 +108,7 @@ func nilIfEmpty(s string) any {
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	s.routes(mux)
-	return securityHeaders(mux, strings.HasPrefix(s.cfg.AppURL, "https://"))
+	return securityHeaders(s.customDomains(mux), strings.HasPrefix(s.cfg.AppURL, "https://"))
 }
 
 func securityHeaders(next http.Handler, https bool) http.Handler {

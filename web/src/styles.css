@@ -1365,3 +1365,24 @@ a.list-item:hover {
   gap: 6px;
   color: var(--text-2);
 }
+
+/* ---------- uptime ---------- */
+.uptime-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+}
+.uptime-tiles > div {
+  padding: 14px 16px;
+  border-right: 1px solid var(--border);
+}
+.uptime-tiles .k {
+  color: var(--text-3);
+  font-size: 12px;
+}
+.uptime-tiles .v {
+  font-size: 20px;
+  font-variant-numeric: tabular-nums;
+}
+.text-err {
+  color: var(--err);
+}

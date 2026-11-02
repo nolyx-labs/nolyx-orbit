@@ -29,7 +29,12 @@ type channelConfig struct {
 
 // safeClient refuses private/loopback destinations (SSRF) unless explicitly allowed. It applies to redirects too.
 func (s *Server) safeClient() *http.Client {
-	return &http.Client{Timeout: 10 * time.Second, Transport: &http.Transport{DialContext: (&net.Dialer{
+	return &http.Client{Timeout: 10 * time.Second, Transport: &http.Transport{DialContext: s.safeDialer().DialContext}}
+}
+
+// safeDialer is the dialer behind safeClient, also used by uptime monitors.
+func (s *Server) safeDialer() *net.Dialer {
+	return &net.Dialer{
 		Control: func(_, address string, _ syscall.RawConn) error {
 			if s.cfg.AllowPrivateWebhooks {
 				return nil
@@ -41,7 +46,7 @@ func (s *Server) safeClient() *http.Client {
 			}
 			return nil
 		},
-	}).DialContext}}
+	}
 }
 
 func (s *Server) notify(ctx context.Context, a alertState, status string) {
@@ -162,20 +167,22 @@ func (s *Server) sendEmail(to []string, subject, text, html string) error {
 	var related bytes.Buffer
 	rw := multipart.NewWriter(&related)
 	qp(rw, "text/html", html)
-	w, _ := rw.CreatePart(textproto.MIMEHeader{"Content-Type": {"image/png"}, "Content-ID": {"<logo>"},
-		"Content-Disposition": {`inline; filename="logo.png"`}, "Content-Transfer-Encoding": {"base64"}})
-	b64 := base64.StdEncoding.EncodeToString(emailLogo)
-	for len(b64) > 76 {
-		io.WriteString(w, b64[:76]+"\r\n")
-		b64 = b64[76:]
+	if strings.Contains(html, "cid:logo") { // an unreferenced inline image shows up as an attachment in some clients
+		w, _ := rw.CreatePart(textproto.MIMEHeader{"Content-Type": {"image/png"}, "Content-ID": {"<logo>"},
+			"Content-Disposition": {`inline; filename="logo.png"`}, "Content-Transfer-Encoding": {"base64"}})
+		b64 := base64.StdEncoding.EncodeToString(emailLogo)
+		for len(b64) > 76 {
+			io.WriteString(w, b64[:76]+"\r\n")
+			b64 = b64[76:]
+		}
+		io.WriteString(w, b64)
 	}
-	io.WriteString(w, b64)
 	rw.Close()
 
 	var body bytes.Buffer
 	mw := multipart.NewWriter(&body)
 	qp(mw, "text/plain", text)
-	w, _ = mw.CreatePart(textproto.MIMEHeader{"Content-Type": {"multipart/related; boundary=" + rw.Boundary()}})
+	w, _ := mw.CreatePart(textproto.MIMEHeader{"Content-Type": {"multipart/related; boundary=" + rw.Boundary()}})
 	w.Write(related.Bytes())
 	mw.Close()
 	msg := "From: " + s.cfg.SMTPFrom + "\r\nTo: " + strings.Join(to, ", ") +

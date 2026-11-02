@@ -3,6 +3,8 @@ import {
   AppWindow,
   Archive,
   Bell,
+  HeartPulse,
+  Radio,
   Boxes,
   Building2,
   Container as ContainerIcon,
@@ -67,7 +69,9 @@ const NAV: { label: string; items: [string, string, LucideIcon][] }[] = [
       ['Metrics', 'metrics', Activity],
       ['Logs', 'logs', ScrollText],
       ['Events', 'events', History],
+      ['Monitors', 'monitors', HeartPulse],
       ['Alerts', 'alerts', Bell],
+      ['Status pages', 'status-pages', Radio],
     ],
   },
   {

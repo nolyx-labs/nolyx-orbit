@@ -149,6 +149,15 @@ There is no shell or terminal action.
   - **Event alerts** for unhealthy containers and failed deployments.
 
   They notify through email (SMTP), Slack, Discord or a webhook. Incidents can be acknowledged. Outbound webhooks block private addresses unless `ALLOW_PRIVATE_WEBHOOKS=true`.
+- **Uptime monitors** run HTTP(S) and TCP checks from the control plane every 30 seconds to 1 hour.
+  - Two failed checks in a row mark a monitor down and open an outage; uptime is computed from outages.
+  - Checks use the same private-address guard as webhooks (`ALLOW_PRIVATE_WEBHOOKS`).
+  - The `monitor_down` alert metric notifies through the usual channels.
+- **Status pages** are server-rendered Go templates (no JavaScript needed), laid out like Atlassian Statuspage.
+  - Each component takes its status from a monitor, server or service, or is set by hand. Open incidents can raise it; in-progress maintenance shows "under maintenance". The worker records status changes every 30 seconds, and the 90-day bars are built from that history.
+  - Maintenance starts and completes on schedule, and holds alerts for the servers and monitors it covers.
+  - Subscribers confirm by email (double opt-in) or register a webhook. Atom/RSS feeds, a badge, and `summary.json`/`status.json` in Statuspage's v2 format are served too.
+  - Custom domains are matched on the `Host` header. The bundled Caddy issues their certificates on demand, after asking `/internal/tls-ask`.
 - **Teams:**
   - Invites are bound to the invited email address.
   - Teams can raise a member's role on specific projects.
