@@ -28,6 +28,7 @@ import { ApiKeys } from './pages/security/ApiKeys'
 import { Secrets } from './pages/security/Secrets'
 import { ServerDetail } from './pages/servers/ServerDetail'
 import { Servers } from './pages/servers/Servers'
+import { Catalog } from './pages/services/Catalog'
 import { NewService } from './pages/services/NewService'
 import { ServiceDetail } from './pages/services/ServiceDetail'
 import { Services } from './pages/services/Services'
@@ -38,6 +39,9 @@ import { StatusPageDetail } from './pages/status/StatusPageDetail'
 import { StatusPages } from './pages/status/StatusPages'
 import { OrganizationSettings } from './pages/settings/OrganizationSettings'
 import { ProjectsSettings } from './pages/settings/ProjectsSettings'
+import { Updates } from './pages/updates/Updates'
+import { WorkflowDetail } from './pages/workflows/WorkflowDetail'
+import { Workflows } from './pages/workflows/Workflows'
 import './styles.css'
 
 try {
@@ -63,6 +67,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
           <Route path="docker" element={<Docker />} />
           <Route path="services" element={<Services />} />
           <Route path="services/new" element={<NewService />} />
+          <Route path="catalog" element={<Catalog />} />
           <Route path="services/:aid" element={<ServiceDetail />} />
           <Route path="deployments" element={<Deployments />} />
           <Route path="deployments/:did" element={<DeploymentDetail />} />
@@ -74,6 +79,11 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
           <Route path="status-pages" element={<StatusPages />} />
           <Route path="status-pages/:id" element={<Navigate to="incidents" replace />} />
           <Route path="status-pages/:id/:tab" element={<StatusPageDetail />} />
+          <Route path="updates" element={<Updates />} />
+          <Route path="workflows" element={<Workflows />} />
+          <Route path="workflows/:id" element={<WorkflowDetail />} />
+          <Route path="workflows/:id/runs/:rid" element={<WorkflowDetail />} />
+          <Route path="workflows/:id/:tab" element={<WorkflowDetail />} />
           <Route path="access" element={<Access />} />
           <Route path="settings/agents" element={<Agents />} />
           <Route path="clusters" element={<Clusters />} />

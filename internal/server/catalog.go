@@ -173,7 +173,7 @@ func planInstall(app catalogApp, name, addr string, hostPorts []int, inputs map[
 		comps = append(comps, c)
 	}
 	for k := range optional {
-		if !slices.ContainsFunc(app.Companions, func(c catalogCompanion) bool { return c.Optional && c.Suffix == k }) {
+		if !slices.ContainsFunc(app.Companions, func(c catalogCompanion) bool { return c.Suffix == k }) {
 			return nil, nil, errStatus(400, "unknown companion %q", k)
 		}
 	}
@@ -267,9 +267,9 @@ func planInstall(app catalogApp, name, addr string, hostPorts []int, inputs map[
 	return out, creds, nil
 }
 
-func orEmpty(s []string) []string {
+func orEmpty[T any](s []T) []T {
 	if s == nil {
-		return []string{}
+		return []T{}
 	}
 	return s
 }
@@ -332,7 +332,12 @@ func (s *Server) listCatalog(w http.ResponseWriter, r *http.Request) error {
 	if _, err := s.projectAccess(r, "viewer"); err != nil {
 		return err
 	}
-	writeJSON(w, 200, map[string]any{"categories": catalogCategories, "apps": catalogApps})
+	// Empty lists go out as [] rather than null, so the UI can map over them.
+	apps := slices.Clone(catalogApps)
+	for i, a := range apps {
+		apps[i].Ports, apps[i].Volumes, apps[i].Inputs, apps[i].Companions = orEmpty(a.Ports), orEmpty(a.Volumes), orEmpty(a.Inputs), orEmpty(a.Companions)
+	}
+	writeJSON(w, 200, map[string]any{"categories": catalogCategories, "apps": apps})
 	return nil
 }
 
@@ -458,15 +463,8 @@ func (s *Server) installCatalogApp(w http.ResponseWriter, r *http.Request) error
 		out[i].DeploymentID, deps = did, append(deps, did)
 	}
 	// The services exist even if a deploy couldn't start, and these credentials aren't shown again.
-	writeJSON(w, 201, map[string]any{"services": out, "credentials": orEmptyCreds(creds)})
+	writeJSON(w, 201, map[string]any{"services": out, "credentials": orEmpty(creds)})
 	return nil
-}
-
-func orEmptyCreds(c []catalogCredential) []catalogCredential {
-	if c == nil {
-		return []catalogCredential{}
-	}
-	return c
 }
 
 // deployAfter deploys a service once its companions' deployments succeeded, so an app never boots against

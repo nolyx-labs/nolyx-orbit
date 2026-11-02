@@ -321,7 +321,7 @@ var catalogApps = []catalogApp{
 		Env: env{"N8N_ENCRYPTION_KEY": "${secret:n8n_encryption_key}", "N8N_SECURE_COOKIE": "false", "GENERIC_TIMEZONE": "${input:timezone}"},
 		Inputs: []catalogInput{{Key: "timezone", Label: "Time zone", Type: "text", Default: "UTC", Required: true,
 			Hint: "For schedules, e.g. Europe/Berlin"}},
-		Secrets: []catalogSecret{{Key: "n8n_encryption_key", Label: "Encryption key (keep for restores)"}},
+		Secrets: []catalogSecret{{Key: "n8n_encryption_key", Label: "Encryption key (keep for restores)"}, {Key: "n8n_db_password", Label: "Database password"}},
 		Companions: []catalogCompanion{{Suffix: "db", App: "postgresql", Label: "PostgreSQL database (instead of SQLite)", Optional: true,
 			Env: env{"POSTGRES_USER": "n8n", "POSTGRES_DB": "n8n", "POSTGRES_PASSWORD": "${secret:n8n_db_password}"},
 			ParentEnv: env{"DB_TYPE": "postgresdb", "DB_POSTGRESDB_HOST": "${service:db}", "DB_POSTGRESDB_DATABASE": "n8n",

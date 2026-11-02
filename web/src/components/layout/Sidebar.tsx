@@ -6,6 +6,7 @@ import {
   HeartPulse,
   Radio,
   Sparkles,
+  Store,
   Boxes,
   Building2,
   Container as ContainerIcon,
@@ -19,6 +20,7 @@ import {
   LogOut,
   Moon,
   Network,
+  PackageCheck,
   Plug,
   Rocket,
   ScrollText,
@@ -44,6 +46,7 @@ const NAV: { label: string; items: [string, string, LucideIcon][] }[] = [
     label: 'Infrastructure',
     items: [
       ['Servers', 'servers', ServerIcon],
+      ['Updates', 'updates', PackageCheck],
       ['Clusters', 'clusters', Network],
       ['Docker', 'docker', ContainerIcon],
       ['Nomad', 'nomad', Boxes],
@@ -53,6 +56,7 @@ const NAV: { label: string; items: [string, string, LucideIcon][] }[] = [
     label: 'Applications',
     items: [
       ['Services', 'services', AppWindow],
+      ['One-click apps', 'catalog', Store],
       ['Deployments', 'deployments', Rocket],
       ['Releases', 'releases', Tag],
     ],

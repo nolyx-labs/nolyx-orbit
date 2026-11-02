@@ -1,7 +1,6 @@
 import { Link, NavLink, Navigate, useParams } from 'react-router'
 import { useProject } from '../../components/layout/context'
 import { PageHead } from '../../components/ui/PageHead'
-import { Panel } from '../../components/ui/Panel'
 import { Empty, Loading } from '../../components/ui/states'
 import { StatusText, serverTone } from '../../components/ui/status'
 import { useApi } from '../../lib/api'
@@ -17,17 +16,7 @@ import { ServerOverview } from './ServerOverview'
 import { ServerServices } from './ServerServices'
 import { ServerUpdates } from './ServerUpdates'
 
-const SERVER_TABS = [
-  'overview',
-  'containers',
-  'services',
-  'metrics',
-  'logs',
-  'events',
-  'terminal',
-  'configuration',
-  'updates',
-]
+const SERVER_TABS = ['overview', 'containers', 'services', 'metrics', 'logs', 'events', 'configuration', 'updates']
 
 export function ServerDetail() {
   const { project } = useProject()
@@ -80,16 +69,6 @@ export function ServerDetail() {
       {tab === 'metrics' && <ServerMetrics sid={s.id} />}
       {tab === 'logs' && <Navigate to={`/p/${project.id}/logs?server=${s.id}`} replace />}
       {tab === 'events' && <ServerEvents sid={s.id} />}
-      {tab === 'terminal' && (
-        <Panel pad>
-          <div style={{ fontWeight: 500, marginBottom: 4 }}>No remote shell, by design</div>
-          <div className="muted" style={{ maxWidth: 680 }}>
-            The agent only accepts an allowlisted set of audited commands (container start/stop/restart/remove, logs,
-            deploy). An interactive terminal would turn the control plane into a root shell on every server. If it's
-            added, it will be opt-in per server, require admin role and re-authentication, and record every session.
-          </div>
-        </Panel>
-      )}
       {tab === 'configuration' && <ServerConfig s={s} />}
       {tab === 'updates' && <ServerUpdates s={s} />}
     </div>
