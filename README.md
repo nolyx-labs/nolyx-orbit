@@ -11,7 +11,7 @@ What you can do with it:
 - **Databases:** monitor PostgreSQL, add read replicas, promote replicas, and schedule backups (including to S3).
 - **Observe:** metrics, searchable central logs, events, uptime monitors and alerts sent by email, Slack, Discord or webhook.
 - **Status pages:** public pages in the style of Atlassian Statuspage, with 90-day uptime, incidents, scheduled maintenance, email and webhook subscribers, feeds and custom domains.
-- **Secure:** secrets, API keys, teams with per-project roles, and an audit log of every action.
+- **Secure:** secrets, API keys, teams with per-project roles, custom roles, and an audit log of every action.
 - **Provision:** create new servers in Hetzner Cloud with the agent pre-installed.
 
 ---
@@ -25,6 +25,7 @@ What you can do with it:
    - [Option B: plain HTTP](#option-b-plain-http)
    - [Option C: your own reverse proxy](#option-c-your-own-reverse-proxy)
 4. [Connect servers](#connect-servers)
+   - [How the agent connection is secured](#how-the-agent-connection-is-secured)
 5. [Updating, backups and data](#updating-backups-and-data)
 6. [Configuration reference](#configuration-reference)
 7. [Troubleshooting](#troubleshooting)
@@ -176,8 +177,11 @@ curl -fsSL https://orbit.example.com/install.sh | sudo ORBIT_TOKEN=orb_enr_… O
 ```
 
 - The agent is downloaded from your own control plane and installed as the `orbit-agent` service.
+- Connecting is read-only. The agent reports what the server runs and scans it (`apt-get -s`, `dnf --cacheonly`), and changes nothing until someone acts in Orbit.
 - `ORBIT_REGION` is optional and labels the server.
 - To follow its logs, run `journalctl -u orbit-agent -f`.
+- To remove the agent, run `sudo orbit-agent disconnect`. It removes the service, its config and the server's identity, and leaves every container and service running.
+- Every command the agent runs is recorded on the server in `/var/lib/orbit-agent/actions.log`, one JSON line each: time, command ID, action, result and a SHA-256 of its arguments (never the arguments, which can hold secrets). It rotates to `actions.log.1` at 10 MB.
 
 **The control-plane machine itself:**
 
@@ -191,6 +195,17 @@ ORBIT_TOKEN=orb_enr_… docker compose --profile agent up -d --build agent
 2. Use **Settings → Agents → Create server**. This requires an `https://` `APP_URL`.
 
 Servers appear under **Servers** within seconds. Containers, databases and logs follow shortly after.
+
+### How the agent connection is secured
+
+- **Outbound only.** The agent dials the control plane over HTTPS (a WebSocket to `ORBIT_URL`, port 443 by default). The server needs no inbound ports.
+- **Per-server credentials.** Enrollment exchanges the one-time token for a server ID and a random secret, stored at mode `0600`. The control plane keeps only a hash of the secret. Removing a server in Orbit revokes it.
+- **Signed commands.** Every command is signed with ed25519 over its ID, the target server, the action, its expiry and a hash of its arguments. The agent pinned the public key at enrollment. A stolen session or a compromised proxy between the two can't forge commands, and a command signed for one server can't be replayed on another.
+- **A fixed action list.** The agent rejects any action that isn't on its built-in list, and any command that is expired or reuses an ID. It has no general remote shell.
+- **Read-only until asked.** Connecting only reports and scans. Every change starts from a person (or a workflow they saved) in Orbit, checked against their role, and is written to the audit log.
+- **A local record.** Every command is also logged on the server itself, in `/var/lib/orbit-agent/actions.log`.
+
+The agent's identity is its secret, not a TLS client certificate (mutual TLS). That keeps it working behind any reverse proxy, including the bundled Caddy, which terminates TLS. The command signatures are what stop a compromised control-plane connection from being used against your servers.
 
 ---
 

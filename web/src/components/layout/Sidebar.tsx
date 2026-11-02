@@ -17,6 +17,7 @@ import {
   Key,
   KeyRound,
   LayoutDashboard,
+  LayoutGrid,
   LogOut,
   Moon,
   Network,
@@ -41,7 +42,13 @@ import { NewProject } from './NewProjectDialog'
 import { setTheme } from './theme'
 
 const NAV: { label: string; items: [string, string, LucideIcon][] }[] = [
-  { label: '', items: [['Overview', 'overview', LayoutDashboard]] },
+  {
+    label: '',
+    items: [
+      ['Overview', 'overview', LayoutDashboard],
+      ['All projects', 'fleet', LayoutGrid],
+    ],
+  },
   {
     label: 'Infrastructure',
     items: [

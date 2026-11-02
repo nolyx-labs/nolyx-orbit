@@ -9,6 +9,7 @@ import { api, useApi } from '../../lib/api'
 import { datetime } from '../../lib/format'
 import { OrgData, useOrg } from '../settings/useOrg'
 import { InviteDialog } from './InviteDialog'
+import { AREA_LABELS, CustomRole, RoleDialog } from './RoleDialog'
 import { TeamDialog } from './TeamDialog'
 
 interface Audit {
@@ -27,14 +28,16 @@ export function Access() {
   const canAdmin = useOrgCan('admin')
   const [data, , reload] = useOrg()
   const [rows] = useApi<Audit[]>(canAdmin ? `/orgs/${org.id}/audit` : null)
+  const [roles, , reloadRoles] = useApi<{ areas: string[]; roles: CustomRole[] }>(`/orgs/${org.id}/roles`)
+  const [roleEdit, setRoleEdit] = useState<CustomRole | 'new' | null>(null)
   const [q, setQ] = useState('')
   const [inviting, setInviting] = useState(false)
   const [teamEdit, setTeamEdit] = useState<OrgData['teams'][number] | 'new' | null>(null)
   const [removing, setRemoving] = useState<OrgData['members'][number] | null>(null)
   const [err, setErr] = useState<string>()
   const shown = rows?.filter((r) => !q || `${r.actor} ${r.action} ${r.target}`.toLowerCase().includes(q.toLowerCase()))
-  const setRole = (uid: string, role: string) =>
-    api('PATCH', `/orgs/${org.id}/members/${uid}`, { role }).then(
+  const setRole = (uid: string, body: { role: string } | { custom_role_id: string }) =>
+    api('PATCH', `/orgs/${org.id}/members/${uid}`, body).then(
       () => {
         reload()
         reloadMe()
@@ -64,6 +67,7 @@ export function Access() {
                 <tr>
                   <th>Member</th>
                   <th>Role</th>
+                  <th>Custom role</th>
                   <th>2FA</th>
                   <th>Teams</th>
                   <th />
@@ -82,7 +86,7 @@ export function Access() {
                           className="select"
                           style={{ width: 120 }}
                           value={m.role}
-                          onChange={(e) => setRole(m.id, e.target.value)}
+                          onChange={(e) => setRole(m.id, { role: e.target.value })}
                         >
                           {['viewer', 'member', 'admin', ...(data.role === 'owner' ? ['owner'] : [])].map((r) => (
                             <option key={r}>{r}</option>
@@ -91,6 +95,29 @@ export function Access() {
                         </select>
                       ) : (
                         <span className="mono">{m.role}</span>
+                      )}
+                    </td>
+                    <td>
+                      {m.role === 'owner' ? (
+                        <span className="faint">—</span>
+                      ) : canAdmin && roles?.roles.length ? (
+                        <select
+                          className="select"
+                          style={{ width: 140 }}
+                          value={m.custom_role_id ?? ''}
+                          onChange={(e) => setRole(m.id, { custom_role_id: e.target.value })}
+                        >
+                          <option value="">None</option>
+                          {roles.roles.map((r) => (
+                            <option key={r.id} value={r.id}>
+                              {r.name}
+                            </option>
+                          ))}
+                        </select>
+                      ) : (
+                        <span className="muted">
+                          {roles?.roles.find((r) => r.id === m.custom_role_id)?.name ?? '—'}
+                        </span>
                       )}
                     </td>
                     <td>{m.mfa_enabled ? <Badge tone="ok">on</Badge> : <Badge>off</Badge>}</td>
@@ -132,7 +159,7 @@ export function Access() {
             <div className="panel-body faint" style={{ fontSize: 12 }}>
               <b>owner</b> manages owners and can delete the organization · <b>admin</b> adds/removes servers, databases
               and members · <b>member</b> deploys and operates · <b>viewer</b> reads. Teams can raise a member's role on
-              specific projects.
+              specific projects. A custom role narrows a member's role per area.
             </div>
           </Panel>
           <Panel
@@ -183,16 +210,71 @@ export function Access() {
             )}
           </Panel>
           <Panel
+            title="Custom roles"
+            actions={
+              canAdmin && (
+                <button className="btn sm" onClick={() => setRoleEdit('new')}>
+                  New role
+                </button>
+              )
+            }
+          >
+            {!roles ? (
+              <Loading />
+            ) : !roles.roles.length ? (
+              <Empty title="No custom roles">
+                Example: a "Deployer" role that can deploy services but only view servers and has no access to secrets.
+              </Empty>
+            ) : (
+              <table className="t">
+                <thead>
+                  <tr>
+                    <th>Role</th>
+                    <th>Access</th>
+                    <th className="right">Members</th>
+                    <th />
+                  </tr>
+                </thead>
+                <tbody>
+                  {roles.roles.map((r) => (
+                    <tr key={r.id}>
+                      <td className="name">{r.name}</td>
+                      <td className="muted" style={{ fontSize: 12 }}>
+                        {roles.areas.map((a) => `${AREA_LABELS[a] ?? a}: ${r.permissions[a] ?? 'none'}`).join(' · ')}
+                      </td>
+                      <td className="right mono">{r.members}</td>
+                      <td className="right">
+                        {canAdmin && (
+                          <button className="btn ghost sm" onClick={() => setRoleEdit(r)}>
+                            Edit
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </Panel>
+          <Panel
             title="Audit log"
             actions={
               canAdmin && (
-                <input
-                  className="input"
-                  style={{ width: 220, height: 26 }}
-                  placeholder="Filter…"
-                  value={q}
-                  onChange={(e) => setQ(e.target.value)}
-                />
+                <>
+                  <a className="btn sm" href={`/api/v1/orgs/${org.id}/audit/export`} download>
+                    Export CSV
+                  </a>
+                  <a className="btn sm" href={`/api/v1/orgs/${org.id}/audit/export?format=jsonl`} download>
+                    Export JSON
+                  </a>
+                  <input
+                    className="input"
+                    style={{ width: 220, height: 26 }}
+                    placeholder="Filter…"
+                    value={q}
+                    onChange={(e) => setQ(e.target.value)}
+                  />
+                </>
               )
             }
           >
@@ -238,6 +320,18 @@ export function Access() {
           data={data}
           onClose={() => setTeamEdit(null)}
           onDone={reload}
+        />
+      )}
+      {roleEdit && roles && (
+        <RoleDialog
+          role={roleEdit === 'new' ? null : roleEdit}
+          areas={roles.areas}
+          onClose={() => setRoleEdit(null)}
+          onDone={() => {
+            reloadRoles()
+            reload()
+            reloadMe()
+          }}
         />
       )}
       {removing && (

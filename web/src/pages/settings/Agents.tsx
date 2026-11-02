@@ -60,8 +60,11 @@ export function Agents() {
           <div className="panel-body stack" style={{ gap: 12 }}>
             <div className="muted" style={{ maxWidth: 720 }}>
               The agent opens an outbound TLS connection to this control plane. Your server needs no inbound ports.
-              Commands it runs are signed by the control plane and pinned at enrollment. Enrollment tokens are valid for
-              24 hours and can enroll multiple servers. <span className="mono">ORBIT_REGION</span> is optional.
+              Connecting is read-only: the agent reports what the server runs and scans it, and changes nothing until
+              someone in Orbit asks it to. Every command it runs is signed by the control plane, pinned at enrollment
+              and recorded on the server in <span className="mono">/var/lib/orbit-agent/actions.log</span>. Enrollment
+              tokens are valid for 24 hours and can enroll multiple servers. <span className="mono">ORBIT_REGION</span>{' '}
+              is optional.
             </div>
             {!fresh ? (
               <div>

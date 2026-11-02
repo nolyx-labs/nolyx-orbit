@@ -55,12 +55,13 @@ type Agent struct {
 	conn    *websocket.Conn
 	backlog []protocol.Metrics // samples kept while disconnected
 	seen    *seenSet
+	actions *actionLog
 }
 
 const maxBacklog = 360 // 1h at 10s
 
 func New(cfg Config, log *slog.Logger) *Agent {
-	a := &Agent{cfg: cfg, host: &Host{Root: cfg.HostRoot}, docker: NewDocker(cfg.Socket), log: log, seen: newSeenSet(4096)}
+	a := &Agent{cfg: cfg, host: &Host{Root: cfg.HostRoot}, docker: NewDocker(cfg.Socket), log: log, seen: newSeenSet(4096), actions: newActionLog(cfg.StateFile)}
 	a.dbs = newDBMonitor(log)
 	a.proxy = newProxy(log)
 	a.nomad = newNomadClient(cfg.NomadAddr, cfg.NomadTok)

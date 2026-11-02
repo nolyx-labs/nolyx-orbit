@@ -36,6 +36,8 @@ func run(ctx context.Context, name string, args ...string) (string, error) {
 func has(tool string) bool { _, err := exec.LookPath(tool); return err == nil }
 
 // reportInsight sends the inventory every 5 minutes and a security report daily, both right after each (re)connect.
+// Both run unprompted, so they must stay read-only: no package-list refreshes, no writes on the host (the UI promises
+// that connecting a server changes nothing).
 func (a *Agent) reportInsight(ctx context.Context) {
 	t := time.NewTicker(30 * time.Second)
 	defer t.Stop()

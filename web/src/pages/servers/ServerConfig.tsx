@@ -165,14 +165,15 @@ export function ServerConfig({ s }: { s: Server }) {
               from Settings → Agents so Hetzner stops charging for it.
             </div>
           )}
-          The agent will be disconnected and can't reconnect. To uninstall it, run this on the server:
+          The agent will be disconnected and can't reconnect. To uninstall it, run this on the server (containers and
+          services keep running):
           <div className="mono" style={{ margin: '6px 0', userSelect: 'all' }}>
-            sudo systemctl disable --now orbit-agent && sudo rm -rf /etc/systemd/system/orbit-agent.service
-            /usr/local/bin/orbit-agent /etc/orbit-agent /var/lib/orbit-agent
+            sudo orbit-agent disconnect
           </div>
-          If it runs as a container: <span className="mono">docker rm -f orbit-agent && docker volume rm orbit-agent</span>
-          . To add the server back later instead, delete <span className="mono">/var/lib/orbit-agent/state.json</span>{' '}
-          and re-enroll with a new token.
+          If it runs as a container:{' '}
+          <span className="mono">docker rm -f orbit-agent && docker volume rm orbit-agent</span>. To add the server back
+          later instead, delete <span className="mono">/var/lib/orbit-agent/state.json</span> and re-enroll with a new
+          token.
         </Confirm>
       )}
     </div>

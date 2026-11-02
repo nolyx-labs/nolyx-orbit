@@ -19,6 +19,7 @@ import (
 type stepKind struct {
 	label    string
 	role     string // minimum role the saver needs in the project when the step runs
+	route    string // the API route segment whose area (for custom roles) the step acts in
 	canFail  bool   // may carry an on_failure branch
 	validate func(st *wfStep) error
 	run      func(x *wfExec, ctx context.Context, st wfStep) (output string, err error)
@@ -39,11 +40,11 @@ func init() {
 		}
 	}
 	stepKinds = map[string]*stepKind{
-		"redeploy": {label: "Redeploy", role: "member", canFail: true, validate: needService, run: (*wfExec).redeploy},
-		"start":    {label: "Start", role: "member", canFail: true, validate: needService, run: container(protocol.ActionContainerStart)},
-		"stop":     {label: "Stop", role: "member", canFail: true, validate: needService, run: container(protocol.ActionContainerStop)},
-		"restart":  {label: "Restart", role: "member", canFail: true, validate: needService, run: container(protocol.ActionContainerRestart)},
-		"run_command": {label: "Run command in", role: "admin", canFail: true, run: (*wfExec).runCommand, validate: func(st *wfStep) error {
+		"redeploy": {label: "Redeploy", role: "member", route: "apps", canFail: true, validate: needService, run: (*wfExec).redeploy},
+		"start":    {label: "Start", role: "member", route: "apps", canFail: true, validate: needService, run: container(protocol.ActionContainerStart)},
+		"stop":     {label: "Stop", role: "member", route: "apps", canFail: true, validate: needService, run: container(protocol.ActionContainerStop)},
+		"restart":  {label: "Restart", role: "member", route: "apps", canFail: true, validate: needService, run: container(protocol.ActionContainerRestart)},
+		"run_command": {label: "Run command in", role: "admin", route: "servers", canFail: true, run: (*wfExec).runCommand, validate: func(st *wfStep) error {
 			if st.Command = strings.TrimSpace(st.Command); st.Command == "" || len(st.Command) > 4096 {
 				return errStatus(400, "enter a command (up to 4096 characters)")
 			}
@@ -52,7 +53,7 @@ func init() {
 			}
 			return needService(st)
 		}},
-		"check_monitor": {label: "Check monitor", role: "member", canFail: true, run: (*wfExec).checkMonitor, validate: func(st *wfStep) error {
+		"check_monitor": {label: "Check monitor", role: "member", route: "monitors", canFail: true, run: (*wfExec).checkMonitor, validate: func(st *wfStep) error {
 			if st.MonitorID == "" {
 				return errStatus(400, "choose a monitor")
 			}
@@ -61,7 +62,7 @@ func init() {
 			}
 			return nil
 		}},
-		"http": {label: "HTTP request", role: "member", canFail: true, run: (*wfExec).httpRequest, validate: func(st *wfStep) error {
+		"http": {label: "HTTP request", role: "member", route: "workflows", canFail: true, run: (*wfExec).httpRequest, validate: func(st *wfStep) error {
 			if st.Method == "" {
 				st.Method = "POST"
 			}
@@ -81,7 +82,7 @@ func init() {
 			}
 			return nil
 		}},
-		"alert": {label: "Send alert", role: "member", canFail: true, run: (*wfExec).sendAlert, validate: func(st *wfStep) error {
+		"alert": {label: "Send alert", role: "member", route: "channels", canFail: true, run: (*wfExec).sendAlert, validate: func(st *wfStep) error {
 			if len(st.ChannelIDs)+len(st.UserIDs) == 0 || len(st.ChannelIDs) > 20 || len(st.UserIDs) > 50 {
 				return errStatus(400, "choose who gets the alert")
 			}
@@ -90,14 +91,14 @@ func init() {
 			}
 			return nil
 		}},
-		"wait": {label: "Wait", role: "viewer", run: wait, validate: func(st *wfStep) error {
+		"wait": {label: "Wait", role: "viewer", route: "workflows", run: wait, validate: func(st *wfStep) error {
 			if st.Seconds < 1 || st.Seconds > 86400 {
 				return errStatus(400, "wait between 1 second and 24 hours")
 			}
 			return nil
 		}},
 		// If is evaluated by the executor; it only needs validation here.
-		"if": {label: "If", role: "viewer", validate: func(st *wfStep) error { return checkCond(st.If) }},
+		"if": {label: "If", role: "viewer", route: "workflows", validate: func(st *wfStep) error { return checkCond(st.If) }},
 	}
 }
 

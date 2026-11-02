@@ -38,6 +38,7 @@ The migrations in [`internal/server/migrations/`](../internal/server/migrations/
 ```
 organizations ─┬─ memberships ── users ── sessions
                ├─ invites, teams ── team_members, team_project_roles
+               ├─ org_roles (custom roles, referenced by memberships)
                ├─ api_keys, secrets (org-wide), cloud_accounts
                ├─ projects ─┬─ enrollment_tokens, secrets (project)
                │            ├─ servers ─┬─ server_metrics, containers ── container_metrics
@@ -161,6 +162,7 @@ There is no shell or terminal action.
 - **Teams:**
   - Invites are bound to the invited email address.
   - Teams can raise a member's role on specific projects.
+  - Custom roles cap a member's organization role per area (servers, services, databases, monitoring, workflows, secrets, updates). `projectAccess` takes the area from the API path, so each endpoint's existing role check applies within it. Workflow steps are checked against the saver's role in their own area.
 - **Regions:** each server has a region label, set from the agent's `ORBIT_REGION` or edited in the UI. You can filter servers by region, and Nomad jobs spread across datacenters.
 - **Managed servers (Hetzner Cloud):**
   - Orbit creates the server with cloud-init, which installs Docker and the agent with a short-lived token.

@@ -5,6 +5,28 @@ import { ago } from '../../lib/format'
 import { incidentLink } from '../../lib/paths'
 import { OverviewData } from './Overview'
 
+export type AttentionKind = 'backup_failed' | 'findings' | 'monitor_down' | 'reboot' | 'security_updates'
+
+// What each attention row says and where it leads (id is a server, or a monitor for monitor_down).
+const KINDS: Record<AttentionKind, { tone: 'err' | 'warn'; text: (n: number) => string; tab: string; action: string }> =
+  {
+    monitor_down: { tone: 'err', text: () => 'monitor is down', tab: '', action: 'View monitor' },
+    backup_failed: { tone: 'err', text: () => 'last backup failed', tab: 'backups', action: 'View backups' },
+    findings: {
+      tone: 'warn',
+      text: (n) => `${n} high-severity security finding${n > 1 ? 's' : ''}`,
+      tab: 'security',
+      action: 'View findings',
+    },
+    security_updates: {
+      tone: 'warn',
+      text: (n) => `${n} security update${n > 1 ? 's' : ''} pending`,
+      tab: 'updates',
+      action: 'View updates',
+    },
+    reboot: { tone: 'warn', text: () => 'needs a reboot to finish updates', tab: 'updates', action: 'View updates' },
+  }
+
 export function Attention({ data }: { data: OverviewData }) {
   const { project } = useProject()
   return (
@@ -27,6 +49,26 @@ export function Attention({ data }: { data: OverviewData }) {
             <span className="btn sm">View</span>
           </Link>
         ))}
+        {data.attention.map((a) => {
+          const k = KINDS[a.kind]
+          return (
+            <Link
+              key={a.kind + a.id}
+              className="list-item"
+              to={
+                a.kind === 'monitor_down'
+                  ? `/p/${project.id}/monitors/${a.id}`
+                  : `/p/${project.id}/servers/${a.id}/${k.tab}`
+              }
+            >
+              <Dot tone={k.tone} />
+              <span style={{ flex: 1 }}>
+                <b style={{ fontWeight: 500 }}>{a.name}</b> <span className="muted">— {k.text(a.n)}</span>
+              </span>
+              <span className="btn sm">{k.action}</span>
+            </Link>
+          )
+        })}
         {data.servers.total - data.servers.online > 0 && (
           <Link className="list-item" to={`/p/${project.id}/servers`}>
             <Dot tone="err" />

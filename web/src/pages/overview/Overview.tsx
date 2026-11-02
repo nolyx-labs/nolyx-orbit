@@ -13,7 +13,7 @@ import { bitrate, bytes, pct } from '../../lib/format'
 import { useLive } from '../../lib/live'
 import { Deployment, OrbitEvent, Series } from '../../lib/types'
 import { DeploymentRows } from '../deployments/DeploymentRows'
-import { Attention } from './Attention'
+import { Attention, AttentionKind } from './Attention'
 
 export interface OverviewData {
   servers: { total: number; online: number; cpus: number; mem_total: number }
@@ -23,6 +23,7 @@ export interface OverviewData {
   usage: { cpu: number | null; mem: number | null; disk: number | null; net: number | null }
   deployments: Deployment[]
   events: OrbitEvent[]
+  attention: { kind: AttentionKind; id: string; name: string; n: number }[]
   incidents: {
     id: number
     rule: string
@@ -65,7 +66,8 @@ export function Overview() {
   const { servers, containers, apps, usage, databases: dbs } = data
   const offline = servers.total - servers.online
   const appsDown = apps.total - apps.healthy
-  const issues = offline + data.incidents.length + containers.unhealthy + appsDown + dbs.unhealthy
+  const issues =
+    offline + data.incidents.length + containers.unhealthy + appsDown + dbs.unhealthy + data.attention.length
   const health: [Tone, string] =
     servers.total === 0
       ? ['', 'No servers connected']

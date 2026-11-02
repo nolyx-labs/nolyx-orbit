@@ -70,6 +70,8 @@ func (s *Server) retention(ctx context.Context) {
 		`delete from sessions where expires_at < now()`,
 		`delete from password_resets where expires_at < now()`,
 		`delete from events where created_at < now() - interval '90 days'`,
+		`delete from audit_events a using organizations o where o.id = a.org_id and o.audit_retention_days > 0
+		   and a.created_at < now() - make_interval(days => o.audit_retention_days)`,
 		`delete from commands where created_at < now() - interval '90 days'`,
 		`delete from invites where expires_at < now() - interval '7 days'`,
 		`update commands set status = 'failed', error = 'no result from agent', completed_at = now()

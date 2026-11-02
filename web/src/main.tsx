@@ -22,6 +22,7 @@ import { Alerts } from './pages/observability/alerts/Alerts'
 import { MonitorDetail } from './pages/monitors/MonitorDetail'
 import { Monitors } from './pages/monitors/Monitors'
 import { OperationPage } from './pages/operations/OperationPage'
+import { Fleet } from './pages/overview/Fleet'
 import { Overview } from './pages/overview/Overview'
 import { Access } from './pages/security/Access'
 import { ApiKeys } from './pages/security/ApiKeys'
@@ -61,6 +62,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
         <Route path="/p/:pid" element={<Shell />}>
           <Route index element={<Navigate to="overview" replace />} />
           <Route path="overview" element={<Overview />} />
+          <Route path="fleet" element={<Fleet />} />
           <Route path="servers" element={<Servers />} />
           <Route path="servers/:sid" element={<Navigate to="overview" replace />} />
           <Route path="servers/:sid/:tab" element={<ServerDetail />} />

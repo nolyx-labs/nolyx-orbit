@@ -134,9 +134,13 @@ func (s *Server) createMaintenance(w http.ResponseWriter, r *http.Request) error
 	if err := decode(r, &in); err != nil {
 		return err
 	}
-	start := time.Now()
+	// "Now" comes from the database, whose clock starts and ends windows: an app clock even slightly ahead would
+	// leave a window that should start now planned until the next tick.
+	var start time.Time
 	if in.StartsAt != nil {
 		start = *in.StartsAt
+	} else if err := s.db.QueryRow(r.Context(), `select now()`).Scan(&start); err != nil {
+		return err
 	}
 	if start.Before(time.Now().Add(-time.Minute)) || start.After(time.Now().AddDate(0, 0, 60)) {
 		return errStatus(400, "start time must be between now and 60 days from now")

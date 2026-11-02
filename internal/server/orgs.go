@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"slices"
 	"strings"
 )
 
@@ -16,7 +17,7 @@ func (s *Server) getOrg(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	out := map[string]json.RawMessage{}
 	q := map[string]string{
-		"members": `select u.id, u.email, u.name, m.role, u.totp_enabled_at is not null as mfa_enabled,
+		"members": `select u.id, u.email, u.name, m.role, m.custom_role_id, u.totp_enabled_at is not null as mfa_enabled,
 			(select coalesce(json_agg(t.name order by t.name), '[]') from team_members tm join teams t on t.id = tm.team_id where tm.user_id = u.id and t.org_id = m.org_id) as teams
 			from memberships m join users u on u.id = m.user_id where m.org_id::text = $1 order by u.email`,
 		"invites": `select i.id, i.email, i.role, i.expires_at, i.created_at, u.email as invited_by from invites i left join users u on u.id = i.invited_by
@@ -34,7 +35,7 @@ func (s *Server) getOrg(w http.ResponseWriter, r *http.Request) error {
 			return err
 		}
 	}
-	if out["org"], err = s.one(ctx, `select id, name, created_at, require_mfa, require_sso from organizations where id::text = $1`, oid); err != nil {
+	if out["org"], err = s.one(ctx, `select id, name, created_at, require_mfa, require_sso, audit_retention_days from organizations where id::text = $1`, oid); err != nil {
 		return err
 	}
 	out["role"] = mustJSON(role)
@@ -51,12 +52,19 @@ func (s *Server) updateOrg(w http.ResponseWriter, r *http.Request) error {
 		Name       *string `json:"name"`
 		RequireMFA *bool   `json:"require_mfa"`
 		RequireSSO *bool   `json:"require_sso"`
+		AuditDays  *int    `json:"audit_retention_days"`
 	}
 	if err := decode(r, &in); err != nil {
 		return err
 	}
 	if in.RequireSSO != nil && role != "owner" {
 		return errStatus(403, "only owners can change the single sign-on requirement")
+	}
+	if in.AuditDays != nil && role != "owner" {
+		return errStatus(403, "only owners can change how long the audit log is kept")
+	}
+	if in.AuditDays != nil && !slices.Contains([]int{0, 90, 180, 365, 730}, *in.AuditDays) {
+		return errStatus(400, "audit_retention_days must be 0 (forever), 90, 180, 365 or 730")
 	}
 	if in.RequireSSO != nil && *in.RequireSSO && s.oidc == nil {
 		return errStatus(400, "single sign-on isn't set up on this instance (OIDC_ISSUER)")
@@ -85,6 +93,12 @@ func (s *Server) updateOrg(w http.ResponseWriter, r *http.Request) error {
 			return err
 		}
 		s.audit(r, oid, "", u.ID, u.label(), "org.require_sso", fmt.Sprint(*in.RequireSSO), nil)
+	}
+	if in.AuditDays != nil {
+		if _, err := s.db.Exec(r.Context(), `update organizations set audit_retention_days = $2 where id::text = $1`, oid, *in.AuditDays); err != nil {
+			return err
+		}
+		s.audit(r, oid, "", u.ID, u.label(), "org.audit_retention", fmt.Sprint(*in.AuditDays), nil)
 	}
 	w.WriteHeader(204)
 	return nil

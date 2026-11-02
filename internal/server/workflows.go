@@ -96,11 +96,8 @@ func (s *Server) execRun(ctx context.Context, runID string) {
 		err = errors.New("the person who saved this workflow no longer exists: save it again")
 	} else {
 		x.saverID = *saver
-		// Re-check the saver's access now, through the same tenancy boundary as API requests.
-		r, _ := http.NewRequestWithContext(context.WithValue(ctx, userKey, user{ID: x.saverID, Email: x.saverEmail}), "GET", "/", nil)
-		r.SetPathValue("pid", x.p.ID)
 		var p project
-		if p, err = s.projectAccess(r, "member"); err != nil {
+		if p, err = x.access(ctx, "workflows", "member"); err != nil {
 			err = fmt.Errorf("%s, who last saved this workflow, can no longer operate this project (%v)", x.saverEmail, err)
 		} else {
 			x.p = p
@@ -116,6 +113,15 @@ func (s *Server) execRun(ctx context.Context, runID string) {
 	if err != nil && x.kind != "manual" {
 		s.wfNotify(ctx, x.p.ID, true, nil, nil, x.wfName, fmt.Sprintf("Workflow %s failed: %s", x.wfName, msg), x.vars["trigger"], x.vars["run_url"])
 	}
+}
+
+// access re-checks the saver's access now, through the same tenancy boundary as an API request to
+// /projects/{pid}/<route>, so custom roles apply per area.
+func (x *wfExec) access(ctx context.Context, route, minRole string) (project, error) {
+	r, _ := http.NewRequestWithContext(context.WithValue(ctx, userKey, user{ID: x.saverID, Email: x.saverEmail}), "GET",
+		"/api/v1/projects/"+x.p.ID+"/"+route, nil)
+	r.SetPathValue("pid", x.p.ID)
+	return x.s.projectAccess(r, minRole)
 }
 
 func (x *wfExec) run(ctx context.Context, steps []wfStep, prefix string) error {
@@ -156,8 +162,8 @@ func (x *wfExec) step(ctx context.Context, st wfStep, path string) error {
 	}
 	var out string
 	var err error
-	if roleRank[x.p.Role] < roleRank[k.role] {
-		err = fmt.Errorf("%s needs the %s role in this project to do this", x.saverEmail, k.role)
+	if _, aerr := x.access(ctx, k.route, k.role); aerr != nil {
+		err = fmt.Errorf("%s needs the %s role in this project to do this (%v)", x.saverEmail, k.role, aerr)
 	} else {
 		out, err = k.run(x, ctx, st)
 	}

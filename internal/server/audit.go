@@ -3,6 +3,7 @@ package server
 
 import (
 	"context"
+	"encoding/csv"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -44,6 +45,51 @@ func (s *Server) auditLog(w http.ResponseWriter, r *http.Request) error {
 	}
 	writeJSON(w, 200, out)
 	return nil
+}
+
+// auditExport streams an organization's whole audit log as CSV (default) or JSON Lines (?format=jsonl).
+func (s *Server) auditExport(w http.ResponseWriter, r *http.Request) error {
+	oid, _, err := s.orgAccess(r, "admin")
+	if err != nil {
+		return err
+	}
+	jsonl := r.URL.Query().Get("format") == "jsonl"
+	rows, err := s.db.Query(r.Context(), `
+		select a.id, a.created_at, a.actor, a.action, a.target, coalesce(p.name, ''), a.ip, a.metadata::text
+		from audit_events a left join projects p on p.id = a.project_id
+		where a.org_id::text = $1 order by a.id`, oid)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	ext, ctype := "csv", "text/csv"
+	if jsonl {
+		ext, ctype = "jsonl", "application/x-ndjson"
+	}
+	s.audit(r, oid, "", currentUser(r).ID, currentUser(r).label(), "audit.export", ext, nil)
+	w.Header().Set("Content-Type", ctype)
+	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="orbit-audit-%s.%s"`, time.Now().UTC().Format("2006-01-02"), ext))
+	cw := csv.NewWriter(w)
+	if !jsonl {
+		cw.Write([]string{"id", "time", "actor", "action", "target", "project", "ip", "metadata"})
+	}
+	enc := json.NewEncoder(w)
+	for rows.Next() {
+		var id int64
+		var at time.Time
+		var actor, action, target, project, ip, meta string
+		if err := rows.Scan(&id, &at, &actor, &action, &target, &project, &ip, &meta); err != nil {
+			return err
+		}
+		if jsonl {
+			enc.Encode(map[string]any{"id": id, "time": at.UTC(), "actor": actor, "action": action, "target": target,
+				"project": project, "ip": ip, "metadata": json.RawMessage(meta)})
+		} else {
+			cw.Write([]string{fmt.Sprint(id), at.UTC().Format(time.RFC3339), actor, action, target, project, ip, meta})
+		}
+	}
+	cw.Flush()
+	return rows.Err()
 }
 
 // event appends to the project's infrastructure timeline.

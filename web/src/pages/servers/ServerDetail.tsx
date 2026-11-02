@@ -7,16 +7,35 @@ import { useApi } from '../../lib/api'
 import { ago } from '../../lib/format'
 import { useLive } from '../../lib/live'
 import { Server } from '../../lib/types'
+import { ServerBackups } from './ServerBackups'
 import { ServerConfig } from './ServerConfig'
 import { ServerContainers } from './ServerContainers'
+import { ServerDisk } from './ServerDisk'
 import { ServerEvents } from './ServerEvents'
 import { MaintenanceButton, MaintenanceWindows } from './ServerMaintenance'
 import { ServerMetrics } from './ServerMetrics'
 import { ServerOverview } from './ServerOverview'
+import { ServerPorts } from './ServerPorts'
+import { ServerSecurity } from './ServerSecurity'
 import { ServerServices } from './ServerServices'
+import { ServerSpecs } from './ServerSpecs'
+import { ServerSystem } from './ServerSystem'
 import { ServerUpdates } from './ServerUpdates'
 
-const SERVER_TABS = ['overview', 'containers', 'services', 'metrics', 'logs', 'events', 'configuration', 'updates']
+const SERVER_TABS = [
+  'overview',
+  'containers',
+  'services',
+  'system',
+  'metrics',
+  'logs',
+  'events',
+  'security',
+  'disk',
+  'backups',
+  'configuration',
+  'updates',
+]
 
 export function ServerDetail() {
   const { project } = useProject()
@@ -69,6 +88,20 @@ export function ServerDetail() {
       {tab === 'metrics' && <ServerMetrics sid={s.id} />}
       {tab === 'logs' && <Navigate to={`/p/${project.id}/logs?server=${s.id}`} replace />}
       {tab === 'events' && <ServerEvents sid={s.id} />}
+      {tab === 'system' && (
+        <div className="stack">
+          <ServerSystem sid={s.id} />
+          <ServerPorts sid={s.id} />
+        </div>
+      )}
+      {tab === 'security' && <ServerSecurity sid={s.id} />}
+      {tab === 'disk' && (
+        <div className="stack">
+          <ServerSpecs sid={s.id} />
+          <ServerDisk sid={s.id} />
+        </div>
+      )}
+      {tab === 'backups' && <ServerBackups s={s} />}
       {tab === 'configuration' && <ServerConfig s={s} />}
       {tab === 'updates' && <ServerUpdates s={s} />}
     </div>

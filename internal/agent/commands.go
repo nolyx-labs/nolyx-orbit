@@ -33,6 +33,7 @@ func (a *Agent) accept(cmd protocol.Command, now time.Time) error {
 
 func (a *Agent) handle(ctx context.Context, c *websocket.Conn, cmd protocol.Command) {
 	res := protocol.Result{ID: cmd.ID}
+	start := time.Now()
 	out, err := a.exec(ctx, c, cmd)
 	if err != nil {
 		res.Error = err.Error()
@@ -41,6 +42,11 @@ func (a *Agent) handle(ctx context.Context, c *websocket.Conn, cmd protocol.Comm
 		res.Output, _ = json.Marshal(out)
 	}
 	a.log.Info("command", "id", cmd.ID, "action", cmd.Action, "ok", res.OK, "err", res.Error)
+	if a.actions != nil {
+		if err := a.actions.record(cmd, start, res); err != nil {
+			a.log.Warn("action log", "err", err)
+		}
+	}
 	a.send(ctx, c, protocol.TypeResult, res)
 }
 

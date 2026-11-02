@@ -18,6 +18,9 @@ func main() {
 	if len(os.Args) == 3 && os.Args[1] == "backup-receive" { // forced SSH command of the orbit-backups user
 		os.Exit(agent.BackupReceive(os.Args[2]))
 	}
+	if len(os.Args) == 2 && os.Args[1] == "disconnect" {
+		os.Exit(agent.Disconnect(env("ORBIT_STATE", "/var/lib/orbit-agent/state.json"), os.Stdout))
+	}
 	log := slog.New(slog.NewTextHandler(os.Stderr, nil))
 	cfg := agent.Config{
 		URL:       strings.TrimSuffix(os.Getenv("ORBIT_URL"), "/"),

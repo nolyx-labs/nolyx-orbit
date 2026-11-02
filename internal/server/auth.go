@@ -52,14 +52,16 @@ func (s *Server) projectAccess(r *http.Request, minRole string) (project, error)
 	u := currentUser(r)
 	var teamRank int
 	var blocked bool
+	var perms map[string]string
 	err := s.db.QueryRow(r.Context(), `
 		select p.org_id::text, m.role, mfa_blocked(p.org_id, m.user_id), coalesce((
 		  select max(case tpr.role when 'viewer' then 0 when 'member' then 1 when 'admin' then 2 end)
 		  from team_members tm join team_project_roles tpr on tpr.team_id = tm.team_id
-		  where tm.user_id = m.user_id and tpr.project_id = p.id), -1)
+		  where tm.user_id = m.user_id and tpr.project_id = p.id), -1), cr.permissions
 		from projects p
 		join memberships m on m.org_id = p.org_id and m.user_id = $2
-		where p.id::text = $1`, p.ID, u.ID).Scan(&p.OrgID, &p.Role, &blocked, &teamRank)
+		left join org_roles cr on cr.id = m.custom_role_id
+		where p.id::text = $1`, p.ID, u.ID).Scan(&p.OrgID, &p.Role, &blocked, &teamRank, &perms)
 	if err == pgx.ErrNoRows {
 		return p, errStatus(404, "project not found")
 	}
@@ -69,9 +71,13 @@ func (s *Server) projectAccess(r *http.Request, minRole string) (project, error)
 	if blocked {
 		return p, errMFARequired
 	}
-	if teamRank > roleRank[p.Role] {
-		p.Role = rankRole[teamRank]
+	// A custom role caps the organization role in this route's area; team grants on the project still raise it.
+	area := routeArea(r.URL.Path)
+	rank := max(cappedRank(p.Role, perms, area), teamRank)
+	if rank < 0 {
+		return p, errStatus(403, "your role has no access to %s", area)
 	}
+	p.Role = rankRole[rank]
 	if k := u.Key; k != nil {
 		if k.OrgID != p.OrgID || (k.ProjectID != "" && k.ProjectID != p.ID) {
 			return p, errStatus(404, "project not found")

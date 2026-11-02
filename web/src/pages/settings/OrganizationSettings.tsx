@@ -109,6 +109,39 @@ export function OrganizationSettings() {
               )}
             </div>
           )}
+          {orgData && (
+            <div className="panel-body row">
+              <div style={{ flex: 1 }}>
+                <div style={{ fontWeight: 500 }}>Keep the audit log</div>
+                <div className="muted">
+                  Older entries are deleted for good. Export the log from Security → Access first if you need a copy.
+                </div>
+              </div>
+              <select
+                className="select"
+                style={{ width: 140 }}
+                disabled={!isOwner}
+                value={orgData.org.audit_retention_days}
+                onChange={(e) =>
+                  api('PATCH', `/orgs/${org.id}`, { audit_retention_days: +e.target.value }).then(reloadOrg, (e) =>
+                    setError(e.message),
+                  )
+                }
+              >
+                {[
+                  [0, 'Forever'],
+                  [730, '2 years'],
+                  [365, '1 year'],
+                  [180, '180 days'],
+                  [90, '90 days'],
+                ].map(([v, l]) => (
+                  <option key={v} value={v}>
+                    {l}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
         </Panel>
         {canAdmin && (
           <Panel

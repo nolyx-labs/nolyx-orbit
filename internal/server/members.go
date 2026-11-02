@@ -17,19 +17,23 @@ func (s *Server) updateMember(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	var in struct {
-		Role string `json:"role"`
+		Role         string  `json:"role"`
+		CustomRoleID *string `json:"custom_role_id"` // "" clears it
 	}
 	if err := decode(r, &in); err != nil {
 		return err
-	}
-	if _, ok := roleRank[in.Role]; !ok {
-		return errStatus(400, "invalid role")
 	}
 	uid := r.PathValue("uid")
 	var current, email string
 	if err := s.db.QueryRow(r.Context(), `select m.role, u.email from memberships m join users u on u.id = m.user_id where m.org_id::text = $1 and m.user_id::text = $2`,
 		oid, uid).Scan(&current, &email); err != nil {
 		return err
+	}
+	if in.CustomRoleID != nil {
+		return s.setMemberCustomRole(w, r, oid, uid, email, *in.CustomRoleID)
+	}
+	if _, ok := roleRank[in.Role]; !ok {
+		return errStatus(400, "invalid role")
 	}
 	// Only owners can create or demote owners; nobody can act above their own role.
 	if (in.Role == "owner" || current == "owner") && myRole != "owner" {
@@ -43,6 +47,22 @@ func (s *Server) updateMember(w http.ResponseWriter, r *http.Request) error {
 	s.db.Exec(r.Context(), `update memberships set role = $3 where org_id::text = $1 and user_id::text = $2`, oid, uid, in.Role)
 	u := currentUser(r)
 	s.audit(r, oid, "", u.ID, u.label(), "member.role", email, map[string]any{"from": current, "to": in.Role})
+	w.WriteHeader(204)
+	return nil
+}
+
+func (s *Server) setMemberCustomRole(w http.ResponseWriter, r *http.Request, oid, uid, email, roleID string) error {
+	var name *string
+	if roleID != "" {
+		if err := s.db.QueryRow(r.Context(), `select name from org_roles where org_id::text = $1 and id::text = $2`, oid, roleID).Scan(&name); err == pgx.ErrNoRows {
+			return errStatus(400, "unknown role")
+		} else if err != nil {
+			return err
+		}
+	}
+	s.db.Exec(r.Context(), `update memberships set custom_role_id = nullif($3, '')::uuid where org_id::text = $1 and user_id::text = $2`, oid, uid, roleID)
+	u := currentUser(r)
+	s.audit(r, oid, "", u.ID, u.label(), "member.custom_role", email, map[string]any{"role": name})
 	w.WriteHeader(204)
 	return nil
 }
