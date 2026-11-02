@@ -19,19 +19,63 @@
   <a href="docs/ARCHITECTURE.md">Architecture</a>
 </p>
 
----
+<br>
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/overview-dark.webp">
+  <img src="docs/images/overview-light.webp" alt="The Orbit overview: server, service, container and database health, items that need attention, and resource usage over the last 24 hours">
+</picture>
+
+<br>
 
 Orbit is a control plane you run on your own server. You install a small agent on each machine you want to manage. The agent connects out to Orbit, so those machines need no open inbound ports.
 
 ## Features
 
-- **Deploy:** Docker services with zero-downtime deploys, Git push-to-deploy, releases and rollbacks. Import containers and Compose services that are already running.
-- **Orchestrate:** single servers, or a Nomad cluster.
-- **Databases:** monitor PostgreSQL, add and promote read replicas, and schedule backups, including to S3.
-- **Observe:** metrics, searchable logs from containers and system services, uptime monitors checked from several locations, and alerts by email, Slack, Discord or webhook. Logs can also be copied into your own PostgreSQL.
+### Every server at a glance
+
+CPU, memory, disk and network for each machine, grouped by region, with pending security updates and reboots flagged on the overview.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/servers-dark.webp">
+  <img src="docs/images/servers-light.webp" alt="The servers list with status, region, system details and live CPU, memory, disk and network usage">
+</picture>
+
+### Deploys you can trust
+
+Zero-downtime deploys from an image or a Git push, with health checks, automatic rollback and request metrics for every service. Containers and Compose services that are already running can be imported as they are.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/service-dark.webp">
+  <img src="docs/images/service-light.webp" alt="A service page with request rate, error rate and p95 latency charts, deployment history by commit, and its configuration">
+</picture>
+
+### Logs from everything, in one place
+
+Search logs from every container and the system services you choose, with secrets masked on the server before they're sent. Copy them into your own PostgreSQL to keep them longer.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/logs-dark.webp">
+  <img src="docs/images/logs-light.webp" alt="Central log search across servers, with level, service and server filters">
+</picture>
+
+### Uptime, checked from more than one place
+
+HTTP and TCP monitors with response times, outage history and certificate expiry. Add your servers as extra check locations, so a network problem near one of them isn't reported as an outage.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/monitor-dark.webp">
+  <img src="docs/images/monitor-light.webp" alt="A monitor page with uptime percentages, response time over 24 hours, results per location and outage history">
+</picture>
+
+### Also included
+
+- **Databases:** PostgreSQL monitoring, read replicas with promotion, and scheduled backups to S3 or another server.
 - **Status pages:** public pages with 90-day uptime, incidents, scheduled maintenance, subscribers and custom domains.
-- **Secure:** secrets, API keys, teams, custom roles, single sign-on, two-factor authentication and a full audit log.
-- **Provision:** create Hetzner Cloud servers with the agent already installed.
+- **Alerts:** email, Slack, Discord or webhooks, with maintenance windows that hold them.
+- **Access control:** teams, custom roles, single sign-on, two-factor authentication, API keys and a full audit log.
+- **Orchestration:** single servers, or a Nomad cluster.
+- **Provisioning:** create Hetzner Cloud servers with the agent already installed.
 
 ## Contents
 
