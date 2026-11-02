@@ -82,6 +82,7 @@ func (s *Server) finishOperation(ctx context.Context, ac *agentConn, res protoco
 	label := map[string]string{
 		"db.provision": "Provisioning", "db.replica.create": "Replica creation", "db.resync": "Re-sync", "db.remove": "Removal",
 		"db.promote": "Promotion", "db.backup": "Backup", "db.restore": "Restore", "nomad.install": "Nomad install", "nomad.stop": "Nomad job stop",
+		"os.update": "OS update",
 	}[kind]
 	if label == "" {
 		label = kind

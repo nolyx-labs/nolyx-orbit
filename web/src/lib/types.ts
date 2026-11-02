@@ -30,6 +30,9 @@ export interface Server {
   io_read: number | null
   io_write: number | null
   io_util: number | null
+  environment: 'production' | 'staging' | 'development'
+  groups: { id: string; name: string }[]
+  security: { high: number; medium: number; low: number; scanned_at: string | null }
 }
 
 export interface Container {

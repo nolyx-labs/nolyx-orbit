@@ -24,6 +24,15 @@ func (a *Agent) deploy(ctx context.Context, id string, args protocol.DeployArgs,
 	step := stepper(progress)
 	log := func(format string, v ...any) { progress(protocol.Progress{Line: fmt.Sprintf(format, v...)}) }
 
+	// --- server backups (server_backup.go): snapshot the service's volumes before anything is replaced ---
+	if args.Snapshot != nil {
+		log("taking a pre-deploy snapshot of %s's volumes", args.App)
+		if err := a.preDeploySnapshot(ctx, args.App, *args.Snapshot); err != nil {
+			return fmt.Errorf("pre-deploy snapshot failed, so nothing was deployed: %w", err)
+		}
+	}
+	// --- end server backups ---
+
 	if args.Build != nil {
 		err = step("Building image", func() error {
 			log("building %s from %s@%s", args.Image, redact(args.Build.Remote), args.Build.Ref)
@@ -91,6 +100,9 @@ func (a *Agent) deploy(ctx context.Context, id string, args protocol.DeployArgs,
 		if err != nil {
 			return err
 		}
+		if err := a.docker.ensureNetwork(ctx); err != nil {
+			return err
+		}
 		newID, err = a.docker.CreateRaw(ctx, name, body)
 		log("created %s", name)
 		return err
@@ -110,7 +122,7 @@ func (a *Agent) deploy(ctx context.Context, id string, args protocol.DeployArgs,
 			return err
 		}
 	}
-	if err = step("Health check", func() error { return a.healthCheck(ctx, newID, healthAddr, args.HealthPath, log) }); err != nil {
+	if err = step("Health check", func() error { return a.healthCheck(ctx, newID, healthAddr, args.HealthPath, args.HealthCmd != "", log) }); err != nil {
 		return err
 	}
 	if args.Proxy {
@@ -170,7 +182,8 @@ func createBody(args protocol.DeployArgs) (map[string]any, error) {
 	hc := resources(args.CPUs, args.MemoryMB)
 	hc["PortBindings"] = bindings
 	hc["RestartPolicy"] = map[string]string{"Name": "unless-stopped"}
-	return map[string]any{"Image": args.Image, "Env": env, "Labels": labels, "ExposedPorts": exposed, "HostConfig": hc}, nil
+	body := map[string]any{"Image": args.Image, "Env": env, "Labels": labels, "ExposedPorts": exposed, "HostConfig": hc}
+	return body, serviceOptions(args, body, hc)
 }
 
 // upstreamAddr is the container's bridge IP and target port, used by the proxy.
@@ -192,12 +205,15 @@ func (a *Agent) upstreamAddr(ctx context.Context, id, port string) (string, erro
 	return "", fmt.Errorf("container has no network address")
 }
 
-func (a *Agent) healthCheck(ctx context.Context, cid, addr, path string, log func(string, ...any)) error {
+func (a *Agent) healthCheck(ctx context.Context, cid, addr, path string, dockerHealth bool, log func(string, ...any)) error {
 	url := ""
 	if path != "" && addr != "" {
 		url = "http://" + addr + "/" + strings.TrimPrefix(path, "/")
 	}
 	deadline := time.Now().Add(90 * time.Second)
+	if dockerHealth { // databases initialising on first start can take minutes
+		deadline = time.Now().Add(5 * time.Minute)
+	}
 	client := &http.Client{Timeout: 3 * time.Second}
 	for time.Now().Before(deadline) {
 		time.Sleep(2 * time.Second)
@@ -206,6 +222,7 @@ func (a *Agent) healthCheck(ctx context.Context, cid, addr, path string, log fun
 				Running  bool
 				Status   string
 				ExitCode int
+				Health   *struct{ Status string }
 			}
 		}
 		if err := a.docker.Inspect(ctx, cid, &insp); err != nil {
@@ -214,6 +231,13 @@ func (a *Agent) healthCheck(ctx context.Context, cid, addr, path string, log fun
 		if !insp.State.Running {
 			out, _ := a.docker.rawLogs(ctx, cid)
 			return fmt.Errorf("container exited (status %s, code %d):\n%s", insp.State.Status, insp.State.ExitCode, tail(out, 10))
+		}
+		if dockerHealth {
+			if insp.State.Health == nil || insp.State.Health.Status != "healthy" {
+				log("waiting for the container's health check")
+				continue
+			}
+			log("container health check passed")
 		}
 		if url == "" {
 			log("no health check path configured; container running")

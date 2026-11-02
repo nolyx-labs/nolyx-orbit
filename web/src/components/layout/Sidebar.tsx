@@ -27,6 +27,7 @@ import {
   Tag,
   UserRound,
   Users,
+  Workflow,
   type LucideIcon,
 } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
@@ -75,6 +76,7 @@ const NAV: { label: string; items: [string, string, LucideIcon][] }[] = [
       ['Status pages', 'status-pages', Radio],
     ],
   },
+  { label: 'Automation', items: [['Workflows', 'workflows', Workflow]] },
   {
     label: 'Security',
     items: [

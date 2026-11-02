@@ -94,6 +94,8 @@ func (a *Agent) exec(ctx context.Context, c *websocket.Conn, cmd protocol.Comman
 			return nil, err
 		}
 		return nil, a.nomadInstall(long, args, progress)
+	case protocol.ActionOSCheck, protocol.ActionOSInstall, protocol.ActionOSHold, protocol.ActionOSReboot:
+		return a.osExec(long, cmd.Action, cmd.Args, progress)
 	}
 	var args protocol.ContainerArgs
 	if err := json.Unmarshal(cmd.Args, &args); err != nil || args.ContainerID == "" {
@@ -101,6 +103,9 @@ func (a *Agent) exec(ctx context.Context, c *websocket.Conn, cmd protocol.Comman
 	}
 	cctx, ccancel := context.WithTimeout(ctx, 60*time.Second)
 	defer ccancel()
+	if cmd.Action == protocol.ActionContainerExec {
+		return a.docker.Exec(cctx, args.ContainerID, args.Cmd, time.Duration(min(max(args.Timeout, 1), 55))*time.Second)
+	}
 	if cmd.Action == protocol.ActionContainerLogs {
 		return a.docker.Logs(cctx, args.ContainerID, args.Tail)
 	}

@@ -16,3 +16,14 @@ func TestParsePort(t *testing.T) {
 		}
 	}
 }
+
+func TestParseVolume(t *testing.T) {
+	if n, p, err := ParseVolume("data:/var/lib/mysql"); err != nil || n != "data" || p != "/var/lib/mysql" {
+		t.Errorf("ParseVolume = %q %q %v", n, p, err)
+	}
+	for _, bad := range []string{"", "data", "data:", "data:relative", "data:/", "Data:/x", "../x:/x", "a:/x/../etc", "a:/x:ro", "/host:/x"} {
+		if _, _, err := ParseVolume(bad); err == nil {
+			t.Errorf("ParseVolume(%q) accepted", bad)
+		}
+	}
+}

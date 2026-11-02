@@ -22,7 +22,9 @@ func (s *Server) RunWorker(ctx context.Context) {
 			s.evaluateAlerts(ctx)
 			s.updateStatusPages(ctx)
 			s.scheduleBackups(ctx)
+			s.scheduleServerBackups(ctx)
 			s.expireProvisions(ctx)
+			s.runUpdates(ctx)
 		case <-slow.C:
 			s.retention(ctx)
 		}
@@ -71,11 +73,11 @@ func (s *Server) retention(ctx context.Context) {
 		`delete from commands where created_at < now() - interval '90 days'`,
 		`delete from invites where expires_at < now() - interval '7 days'`,
 		`update commands set status = 'failed', error = 'no result from agent', completed_at = now()
-		   where status = 'pending' and created_at < now() - interval '1 hour'`,
+		   where status = 'pending' and created_at < now() - case when action like 'server.%' then interval '13 hours' else interval '1 hour' end`, // server backups run up to 12h
 		`update deployments set status = 'failed', error = 'agent stopped reporting', finished_at = now()
 		   where status = 'running' and created_at < now() - interval '1 hour'`,
 		`update operations set status = 'failed', error = 'agent stopped reporting', finished_at = now()
-		   where status = 'running' and created_at < now() - interval '1 hour'`,
+		   where status = 'running' and created_at < now() - case when kind like 'server.%' then interval '13 hours' else interval '1 hour' end`,
 	} {
 		if _, err := s.db.Exec(ctx, q); err != nil {
 			s.log.Error("retention", "err", err)

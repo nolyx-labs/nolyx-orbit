@@ -29,6 +29,7 @@ const (
 	ActionContainerRestart = "container.restart"
 	ActionContainerRemove  = "container.remove"
 	ActionContainerLogs    = "container.logs"
+	ActionContainerExec    = "container.exec" // workflows: run a command, capture its output
 	ActionDeploy           = "deploy"
 	ActionDBProvision      = "db.provision"      // managed PostgreSQL primary
 	ActionDBReplicaCreate  = "db.replica.create" // pg_basebackup from a primary
@@ -40,14 +41,19 @@ const (
 	ActionNomadRegister    = "nomad.register"
 	ActionNomadStop        = "nomad.stop"
 	ActionNomadInstall     = "nomad.install"
+	ActionOSCheck          = "os.check"   // list pending package updates
+	ActionOSInstall        = "os.install" // install updates, optionally rebooting
+	ActionOSHold           = "os.hold"    // hold or release a package
+	ActionOSReboot         = "os.reboot"
 )
 
 var Actions = map[string]bool{
 	ActionContainerStart: true, ActionContainerStop: true, ActionContainerRestart: true,
-	ActionContainerRemove: true, ActionContainerLogs: true, ActionDeploy: true,
+	ActionContainerRemove: true, ActionContainerLogs: true, ActionContainerExec: true, ActionDeploy: true,
 	ActionDBProvision: true, ActionDBReplicaCreate: true, ActionDBResync: true, ActionDBRemove: true,
 	ActionDBPromote: true, ActionDBBackup: true, ActionDBRestore: true,
 	ActionNomadRegister: true, ActionNomadStop: true, ActionNomadInstall: true,
+	ActionOSCheck: true, ActionOSInstall: true, ActionOSHold: true, ActionOSReboot: true,
 }
 
 type Envelope struct {

@@ -20,6 +20,7 @@ export const OP_LABEL: Record<string, string> = {
   'db.restore': 'Restore',
   'nomad.install': 'Install Nomad',
   'nomad.stop': 'Stop Nomad job',
+  'os.update': 'Install OS updates',
 }
 
 export function OperationPage() {

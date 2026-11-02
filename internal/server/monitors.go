@@ -167,11 +167,13 @@ func (s *Server) recordCheck(ctx context.Context, m monitor, r checkResult) {
 			  (select max(ts) from monitor_checks where monitor_id = $1 and ok), '-infinity')), now()), $2
 			on conflict do nothing`, m.ID, r.Error)
 		s.event(ctx, m.ProjectID, "", "error", "Monitor "+m.Name+" is down: "+r.Error)
+		s.emit(ctx, m.ProjectID, "monitor_down", map[string]any{"monitor_id": m.ID, "monitor": m.Name, "error": r.Error})
 	case before == "down" && after == "up":
 		var d time.Duration
 		s.db.QueryRow(ctx, `update monitor_outages set ended_at = now() where monitor_id = $1 and ended_at is null
 			returning ended_at - started_at`, m.ID).Scan(&d)
 		s.event(ctx, m.ProjectID, "", "info", "Monitor "+m.Name+" is back up after "+d.Round(time.Second).String())
+		s.emit(ctx, m.ProjectID, "monitor_up", map[string]any{"monitor_id": m.ID, "monitor": m.Name, "downtime": d.Round(time.Second).String()})
 	}
 	s.hub.publish(m.ProjectID, "monitors", m.ID)
 }

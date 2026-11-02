@@ -101,6 +101,7 @@ func (s *Server) githubWebhook(w http.ResponseWriter, r *http.Request) error {
 	if err := json.Unmarshal(body, &push); err != nil {
 		return errStatus(400, "invalid payload")
 	}
+	s.emitPush(r.Context(), projectID, r.PathValue("aid"), appName, body)
 	if branch == "" {
 		branch = "main"
 	}

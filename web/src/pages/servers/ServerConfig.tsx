@@ -3,13 +3,24 @@ import { useNavigate } from 'react-router'
 import { useCan, useProject } from '../../components/layout/context'
 import { Confirm } from '../../components/ui/Confirm'
 import { Panel } from '../../components/ui/Panel'
-import { api } from '../../lib/api'
+import { api, useApi } from '../../lib/api'
 import { Server } from '../../lib/types'
+import { ENVIRONMENTS, ServerGroup } from './ServerGroups'
 
 function ServerEdit({ s }: { s: Server }) {
   const { project } = useProject()
-  const [f, setF] = useState({ name: s.name, region: s.region })
+  const [groups] = useApi<ServerGroup[]>(`/projects/${project.id}/server-groups`)
+  const initial = { name: s.name, region: s.region, environment: s.environment }
+  const initialGroups = s.groups.map((g) => g.id).sort()
+  const [f, setF] = useState(initial)
+  const [picked, setPicked] = useState(initialGroups)
   const [msg, setMsg] = useState<string>()
+  const groupsChanged = picked.join() !== initialGroups.join()
+  const changed = JSON.stringify(f) !== JSON.stringify(initial)
+  const save = async () => {
+    if (changed) await api('PATCH', `/projects/${project.id}/servers/${s.id}`, f)
+    if (groupsChanged) await api('PUT', `/projects/${project.id}/servers/${s.id}/groups`, { group_ids: picked })
+  }
   return (
     <Panel title="General">
       <div className="panel-body row" style={{ flexWrap: 'wrap' }}>
@@ -26,12 +37,24 @@ function ServerEdit({ s }: { s: Server }) {
             onChange={(e) => setF({ ...f, region: e.target.value })}
           />
         </label>
+        <label className="field" style={{ width: 180 }}>
+          <span>Environment</span>
+          <select
+            className="select"
+            value={f.environment}
+            onChange={(e) => setF({ ...f, environment: e.target.value as Server['environment'] })}
+          >
+            {ENVIRONMENTS.map((e) => (
+              <option key={e}>{e}</option>
+            ))}
+          </select>
+        </label>
         <button
           className="btn"
           style={{ alignSelf: 'flex-end' }}
-          disabled={f.name === s.name && f.region === s.region}
+          disabled={!changed && !groupsChanged}
           onClick={() =>
-            api('PATCH', `/projects/${project.id}/servers/${s.id}`, f).then(
+            save().then(
               () => setMsg('Saved'),
               (e) => setMsg(e.message),
             )
@@ -45,6 +68,22 @@ function ServerEdit({ s }: { s: Server }) {
           </span>
         )}
       </div>
+      <div className="panel-body checkbox-row" style={{ flexWrap: 'wrap', paddingTop: 0 }}>
+        <span className="muted">Groups:</span>
+        {!groups?.length && <span className="faint">none yet — create them on the Servers page</span>}
+        {groups?.map((g) => (
+          <label key={g.id}>
+            <input
+              type="checkbox"
+              checked={picked.includes(g.id)}
+              onChange={(e) =>
+                setPicked(e.target.checked ? [...picked, g.id].sort() : picked.filter((x) => x !== g.id))
+              }
+            />
+            {g.name}
+          </label>
+        ))}
+      </div>
     </Panel>
   )
 }
@@ -53,7 +92,7 @@ export function ServerConfig({ s }: { s: Server }) {
   const { project } = useProject()
   const canAdmin = useCan('admin')
   const nav = useNavigate()
-  const [confirm, setConfirm] = useState(false)
+  const [confirm, setConfirm] = useState<'remove' | 'clear'>()
   return (
     <div className="stack">
       {canAdmin && <ServerEdit s={s} />}
@@ -73,25 +112,49 @@ export function ServerConfig({ s }: { s: Server }) {
         <Panel title="Danger zone">
           <div className="panel-body row">
             <div style={{ flex: 1 }}>
+              <div style={{ fontWeight: 500 }}>Clear collected data</div>
+              <div className="muted">
+                Deletes this server's metrics history, container logs and events. The server stays connected.
+              </div>
+            </div>
+            <button className="btn danger" onClick={() => setConfirm('clear')}>
+              Clear data
+            </button>
+          </div>
+          <div className="panel-body row">
+            <div style={{ flex: 1 }}>
               <div style={{ fontWeight: 500 }}>Remove server</div>
               <div className="muted">
                 Revokes the agent's credentials and deletes metrics history. Running containers on the server are not
                 touched.
               </div>
             </div>
-            <button className="btn danger" onClick={() => setConfirm(true)}>
+            <button className="btn danger" onClick={() => setConfirm('remove')}>
               Remove server
             </button>
           </div>
         </Panel>
       )}
-      {confirm && (
+      {confirm === 'clear' && (
+        <Confirm
+          title={`Clear data for ${s.name}?`}
+          action="Clear data"
+          danger
+          typeToConfirm={s.name}
+          onClose={() => setConfirm(undefined)}
+          onConfirm={() => api('POST', `/projects/${project.id}/servers/${s.id}/clear-data`, { confirm: s.name })}
+        >
+          Metrics, container logs and the event timeline for this server are deleted for good. The audit log keeps a
+          record that you did this.
+        </Confirm>
+      )}
+      {confirm === 'remove' && (
         <Confirm
           title={`Remove ${s.name}?`}
           action="Remove server"
           danger
           typeToConfirm={s.name}
-          onClose={() => setConfirm(false)}
+          onClose={() => setConfirm(undefined)}
           onConfirm={() =>
             api('DELETE', `/projects/${project.id}/servers/${s.id}`).then(() => nav(`/p/${project.id}/servers`))
           }
@@ -102,8 +165,14 @@ export function ServerConfig({ s }: { s: Server }) {
               from Settings → Agents so Hetzner stops charging for it.
             </div>
           )}
-          The agent will be disconnected and can't reconnect. To add it back, delete{' '}
-          <span className="mono">/var/lib/orbit-agent/state.json</span> and re-enroll with a new token.
+          The agent will be disconnected and can't reconnect. To uninstall it, run this on the server:
+          <div className="mono" style={{ margin: '6px 0', userSelect: 'all' }}>
+            sudo systemctl disable --now orbit-agent && sudo rm -rf /etc/systemd/system/orbit-agent.service
+            /usr/local/bin/orbit-agent /etc/orbit-agent /var/lib/orbit-agent
+          </div>
+          If it runs as a container: <span className="mono">docker rm -f orbit-agent && docker volume rm orbit-agent</span>
+          . To add the server back later instead, delete <span className="mono">/var/lib/orbit-agent/state.json</span>{' '}
+          and re-enroll with a new token.
         </Confirm>
       )}
     </div>

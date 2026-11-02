@@ -10,7 +10,8 @@ var alertMetrics = map[string]struct{ target, unit string }{
 	"cpu": {"server", "%"}, "memory": {"server", "%"}, "disk": {"server", "%"}, "io": {"server", "%"}, "offline": {"server", ""},
 	"replication_lag": {"database", "s"}, "db_connections": {"database", "%"}, "db_down": {"database", ""},
 	"error_rate": {"app", "%"}, "container_restarts": {"container", ""}, "deployment_failed": {"app", ""},
-	"monitor_down": {"monitor", ""},
+	"monitor_down":  {"monitor", ""},
+	"backup_failed": {"server", ""},
 }
 
 // alertSQL yields one row per (rule, target): rule fields, target, current value and whether it breaches.
@@ -66,7 +67,12 @@ where r.metric = 'container_restarts'
 union all
 select r.id::text, r.name, r.metric, 0, r.webhook_url, r.channel_ids::text[], r.project_id::text,
   'monitor', m.id::text, m.name, coalesce(m.server_id::text, ''), 0, m.status = 'down' and not m.paused
-from rules r join monitors m on m.project_id = r.project_id where r.metric = 'monitor_down'`
+from rules r join monitors m on m.project_id = r.project_id where r.metric = 'monitor_down'
+union all
+select r.id::text, r.name, r.metric, 0, r.webhook_url, r.channel_ids::text[], r.project_id::text, 'server', s.id::text, s.name, s.id::text,
+  0, coalesce((select o.status = 'failed' from operations o where o.server_id = s.id and o.kind = 'server.backup' and o.status <> 'running'
+    order by o.created_at desc limit 1), false)
+from rules r join servers s on s.project_id = r.project_id where r.metric = 'backup_failed'`
 
 // maintenanceSQL: servers and monitors under in-progress status page maintenance, and monitors on those servers.
 // Their alerts are held, neither opening nor resolving, until the window ends.
@@ -74,7 +80,8 @@ const maintenanceSQL = `
 with t as (select c.source_id from status_incidents i
   join status_incident_components ic on ic.incident_id = i.id join status_components c on c.id = ic.component_id
   where i.kind = 'maintenance' and i.status = 'in_progress' and c.source_type in ('server','monitor'))
-select source_id::text from t union select id::text from monitors where server_id in (select source_id from t)`
+select source_id::text from t union select id::text from monitors where server_id in (select source_id from t)
+union select id::text from servers_on_hold union select id::text from monitors where server_id in (select id from servers_on_hold)`
 
 type alertState struct {
 	RuleID, Rule, Metric, Webhook, ProjectID   string

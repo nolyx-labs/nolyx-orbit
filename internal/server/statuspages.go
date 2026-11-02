@@ -55,6 +55,8 @@ with src as (
 ), maint as (
   select distinct ic.component_id id from status_incident_components ic join status_incidents i on i.id = ic.incident_id
   where i.kind = 'maintenance' and i.status in ('in_progress','verifying')
+  union select c.id from status_components c join servers_on_hold h on (c.source_type = 'server' and c.source_id = h.id)
+    or (c.source_type = 'monitor' and c.source_id in (select id from monitors where server_id = h.id))
 ), eff as (
   select src.id, case when inc.id is null and maint.id is not null then 'under_maintenance'
     else ($1::text[])[greatest(array_position($1::text[], src.status), coalesce(inc.rank, 1))] end status

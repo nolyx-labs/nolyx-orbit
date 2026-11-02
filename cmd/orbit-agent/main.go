@@ -15,6 +15,9 @@ import (
 var version = "dev" // set with -ldflags "-X main.version=..."
 
 func main() {
+	if len(os.Args) == 3 && os.Args[1] == "backup-receive" { // forced SSH command of the orbit-backups user
+		os.Exit(agent.BackupReceive(os.Args[2]))
+	}
 	log := slog.New(slog.NewTextHandler(os.Stderr, nil))
 	cfg := agent.Config{
 		URL:       strings.TrimSuffix(os.Getenv("ORBIT_URL"), "/"),

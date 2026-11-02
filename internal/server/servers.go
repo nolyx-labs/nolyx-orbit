@@ -12,7 +12,13 @@ import (
 const serverCols = `s.id, s.name, s.hostname, s.ip, s.os, s.arch, s.kernel, s.cpu_count, s.mem_total, s.disk_total,
 	s.agent_version, s.docker_version, s.nomad_version, s.region, s.provider, s.status, s.last_seen_at, s.created_at,
 	m.cpu, m.mem_used, m.disk_used, m.net_rx, m.net_tx, m.load1, m.uptime, m.io_read, m.io_write, m.io_util,
-	(select count(*) from containers c where c.server_id = s.id and c.state = 'running') as containers_running`
+	(select count(*) from containers c where c.server_id = s.id and c.state = 'running') as containers_running,
+	s.environment,
+	(select coalesce(json_agg(json_build_object('id', g.id, 'name', g.name) order by g.name), '[]')
+	  from server_group_members gm join server_groups g on g.id = gm.group_id where gm.server_id = s.id) as groups,
+	(select json_build_object('high', count(*) filter (where f->>'severity' = 'high'), 'medium', count(*) filter (where f->>'severity' = 'medium'),
+	  'low', count(*) filter (where f->>'severity' = 'low'), 'scanned_at', max(i.scan_at))
+	  from server_insight i left join lateral jsonb_array_elements(i.scan->'findings') f on true where i.server_id = s.id) as security`
 
 const serverFrom = ` from servers s left join lateral (select * from server_metrics where server_id = s.id order by ts desc limit 1) m on true`
 
@@ -48,8 +54,9 @@ func (s *Server) updateServer(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	var in struct {
-		Name   *string `json:"name"`
-		Region *string `json:"region"`
+		Name        *string `json:"name"`
+		Region      *string `json:"region"`
+		Environment *string `json:"environment"`
 	}
 	if err := decode(r, &in); err != nil {
 		return err
@@ -60,15 +67,18 @@ func (s *Server) updateServer(w http.ResponseWriter, r *http.Request) error {
 	if in.Region != nil && len(*in.Region) > 64 {
 		return errStatus(400, "invalid region")
 	}
-	tag, err := s.db.Exec(r.Context(), `update servers set name = coalesce($3, name), region = coalesce($4, region) where project_id = $1 and id::text = $2`,
-		p.ID, r.PathValue("sid"), in.Name, in.Region)
+	if in.Environment != nil && !environments[*in.Environment] {
+		return errStatus(400, "environment must be production, staging or development")
+	}
+	tag, err := s.db.Exec(r.Context(), `update servers set name = coalesce($3, name), region = coalesce($4, region), environment = coalesce($5, environment)
+		where project_id = $1 and id::text = $2`, p.ID, r.PathValue("sid"), in.Name, in.Region, in.Environment)
 	if err != nil {
 		return err
 	}
 	if tag.RowsAffected() == 0 {
 		return pgx.ErrNoRows
 	}
-	s.auditProject(r, p, "server.update", r.PathValue("sid"), map[string]any{"name": in.Name, "region": in.Region})
+	s.auditProject(r, p, "server.update", r.PathValue("sid"), map[string]any{"name": in.Name, "region": in.Region, "environment": in.Environment})
 	s.hub.publish(p.ID, "servers", r.PathValue("sid"))
 	return s.getServer(w, r)
 }

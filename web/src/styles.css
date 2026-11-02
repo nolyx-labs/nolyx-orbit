@@ -1386,3 +1386,63 @@ a.list-item:hover {
 .text-err {
   color: var(--err);
 }
+
+/* ---------- workflows ---------- */
+.wf-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 6px;
+}
+.wf-node {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  width: 100%;
+  text-align: left;
+  padding: 9px 12px;
+  background: var(--bg-1);
+  border: 1px solid var(--border-2);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+}
+.wf-node:hover {
+  background: var(--bg-2);
+}
+.wf-node.on {
+  border-color: var(--primary-bg);
+}
+.wf-node.trigger {
+  background: var(--bg-2);
+}
+.wf-branch {
+  margin-left: 18px;
+  padding-left: 12px;
+  border-left: 2px dashed var(--border-2);
+}
+.wf-branch.fail {
+  border-left-color: color-mix(in srgb, var(--err) 40%, transparent);
+}
+.wf-label {
+  font-size: 12px;
+  color: var(--text-3);
+}
+.wf-add {
+  align-self: flex-start;
+  background: none;
+  border: 0;
+  padding: 2px 0;
+  color: var(--text-3);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.wf-add:hover {
+  color: var(--text);
+}
+.dialog .list .wf-node + .wf-node {
+  margin-top: 6px;
+}

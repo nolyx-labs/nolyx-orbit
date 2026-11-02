@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -26,8 +27,10 @@ func SigningPayload(serverID string, c Command) []byte {
 }
 
 type ContainerArgs struct {
-	ContainerID string `json:"container_id"`
-	Tail        int    `json:"tail,omitempty"`
+	ContainerID string   `json:"container_id"`
+	Tail        int      `json:"tail,omitempty"`
+	Cmd         []string `json:"cmd,omitempty"`     // exec
+	Timeout     int      `json:"timeout,omitempty"` // exec, seconds
 }
 
 type Progress struct {
@@ -54,6 +57,10 @@ type DeployArgs struct {
 	Build      *BuildArgs        `json:"build,omitempty"`
 	CPUs       float64           `json:"cpus,omitempty"`
 	MemoryMB   int               `json:"memory_mb,omitempty"`
+	Snapshot   *ServerBackupArgs `json:"snapshot,omitempty"`   // pre-deploy volume snapshot
+	Volumes    []string          `json:"volumes,omitempty"`    // "name:/path", mounted from the Docker volume VolumeName(App, name)
+	Command    []string          `json:"command,omitempty"`    // replaces the image's CMD
+	HealthCmd  string            `json:"health_cmd,omitempty"` // Docker HEALTHCHECK (shell); the deploy waits for "healthy"
 }
 
 // BuildArgs builds Image from a git repository with the Docker daemon's remote-context build.
@@ -101,3 +108,18 @@ func ParsePort(p string) (host, ctr string, err error) {
 	}
 	return host, ctr + "/" + proto, nil
 }
+
+var volumeNameRe = regexp.MustCompile(`^[a-z0-9][a-z0-9_.-]{0,62}$`)
+
+// ParseVolume accepts "data:/var/lib/mysql": a service-local volume name and an absolute container path.
+func ParseVolume(v string) (name, path string, err error) {
+	name, path, ok := strings.Cut(v, ":")
+	if !ok || !volumeNameRe.MatchString(name) || !strings.HasPrefix(path, "/") || path == "/" ||
+		strings.Contains(path, "..") || strings.ContainsAny(path, ":,\x00\n") {
+		return "", "", fmt.Errorf("invalid volume %q (want name:/container/path)", v)
+	}
+	return name, path, nil
+}
+
+// VolumeName is the Docker volume backing a service's named volume; it outlives containers and redeploys.
+func VolumeName(app, name string) string { return "orbit-" + app + "-" + name }

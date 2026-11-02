@@ -101,6 +101,43 @@ func (d *Docker) Pull(ctx context.Context, image string) error {
 	return nil
 }
 
+// Exec runs a command in a running container and returns its combined output; a non-zero exit is an error.
+func (d *Docker) Exec(ctx context.Context, id string, cmd []string, timeout time.Duration) (string, error) {
+	if len(cmd) == 0 {
+		return "", fmt.Errorf("cmd required")
+	}
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	var created struct{ ID string }
+	if err := d.do(ctx, "POST", "/containers/"+url.PathEscape(id)+"/exec", map[string]any{"Cmd": cmd, "AttachStdout": true, "AttachStderr": true}, &created); err != nil {
+		return "", err
+	}
+	b, _ := json.Marshal(map[string]bool{"Detach": false, "Tty": false})
+	req, _ := http.NewRequestWithContext(ctx, "POST", "http://docker/v1.43/exec/"+url.PathEscape(created.ID)+"/start", bytes.NewReader(b))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := d.http.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("command did not finish within %s: %w", timeout, err)
+	}
+	raw, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	resp.Body.Close()
+	if err != nil {
+		return "", fmt.Errorf("command did not finish within %s: %w", timeout, err)
+	}
+	out := demux(raw)
+	if len(out) > 64<<10 {
+		out = out[len(out)-64<<10:] // the end of the output is the useful part
+	}
+	var info struct{ ExitCode int }
+	if err := d.do(ctx, "GET", "/exec/"+url.PathEscape(created.ID)+"/json", nil, &info); err != nil {
+		return "", err
+	}
+	if info.ExitCode != 0 {
+		return "", fmt.Errorf("exit code %d\n%s", info.ExitCode, out[max(0, len(out)-4000):])
+	}
+	return out, nil
+}
+
 func (d *Docker) CreateRaw(ctx context.Context, name string, body any) (string, error) {
 	var out struct {
 		ID string `json:"Id"`

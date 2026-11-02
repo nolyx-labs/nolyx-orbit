@@ -38,6 +38,9 @@ type appInput struct {
 	BuildContext   *string           `json:"build_context"`
 	RepoToken      *string           `json:"repo_token"` // write-only; "" clears it
 	AutoDeploy     *bool             `json:"auto_deploy"`
+	Volumes        []string          `json:"volumes"` // "name:/container/path"
+	Command        []string          `json:"command"`
+	HealthCmd      *string           `json:"health_cmd"`
 }
 
 var pathRe = regexp.MustCompile(`^[A-Za-z0-9._/-]*$`)
@@ -58,6 +61,20 @@ func (in appInput) validate() error {
 		if !envKeyRe.MatchString(k) {
 			return errStatus(400, "invalid environment variable name %q", k)
 		}
+	}
+	names, paths := map[string]bool{}, map[string]bool{}
+	for _, v := range in.Volumes {
+		n, p, err := protocol.ParseVolume(v)
+		if err != nil {
+			return errStatus(400, "%v", err)
+		}
+		if names[n] || paths[p] {
+			return errStatus(400, "duplicate volume %q", v)
+		}
+		names[n], paths[p] = true, true
+	}
+	if len(in.Command) > 64 || (in.HealthCmd != nil && len(*in.HealthCmd) > 1000) {
+		return errStatus(400, "command or health check command too long")
 	}
 	if in.HealthPath != nil && *in.HealthPath != "" && !strings.HasPrefix(*in.HealthPath, "/") {
 		return errStatus(400, "health check path must start with /")
@@ -88,7 +105,7 @@ func (in appInput) validate() error {
 func (s *Server) appCols() string {
 	return `a.id, a.name, a.server_id, s.name as server_name, a.image, a.ports, a.env_keys, a.health_path, a.created_at,
 	a.proxy, a.cpus, a.memory_mb, a.orchestrator, a.nomad_cluster_id, a.instances, a.repo_url, a.branch, a.dockerfile, a.build_context,
-	a.repo_token_encrypted is not null as has_repo_token, a.auto_deploy,
+	a.repo_token_encrypted is not null as has_repo_token, a.auto_deploy, a.volumes, a.command, a.health_cmd,
 	case when a.repo_url <> '' then '` + strings.ReplaceAll(s.cfg.AppURL, "'", "") + `/hooks/github/' || a.id end as webhook_url,
 	(select row_to_json(c) from (select docker_id as id, state, status, health, cpu, mem_used from containers c
 	  where c.server_id = a.server_id and c.labels->>'orbit.app' = a.name order by created desc limit 1) c) as container,
@@ -214,6 +231,15 @@ func (s *Server) appSets(in appInput) (cols []string, vals []any) {
 	if in.AutoDeploy != nil {
 		add("auto_deploy", *in.AutoDeploy)
 	}
+	if in.Volumes != nil {
+		add("volumes", mustJSON(in.Volumes))
+	}
+	if in.Command != nil {
+		add("command", mustJSON(in.Command))
+	}
+	if in.HealthCmd != nil {
+		add("health_cmd", *in.HealthCmd)
+	}
 	return
 }
 
@@ -221,9 +247,14 @@ func (s *Server) appSets(in appInput) (cols []string, vals []any) {
 func (s *Server) checkAppTargets(ctx context.Context, p project, appID string) error {
 	var orch, repo string
 	var server, cluster *string
-	if err := s.db.QueryRow(ctx, `select orchestrator, repo_url, server_id::text, nomad_cluster_id::text from applications where id::text = $1`, appID).
-		Scan(&orch, &repo, &server, &cluster); err != nil {
+	var dockerOnly bool
+	if err := s.db.QueryRow(ctx, `select orchestrator, repo_url, server_id::text, nomad_cluster_id::text,
+		volumes <> '[]' or command <> '[]' or health_cmd <> '' from applications where id::text = $1`, appID).
+		Scan(&orch, &repo, &server, &cluster, &dockerOnly); err != nil {
 		return err
+	}
+	if orch == "nomad" && dockerOnly {
+		return errStatus(400, "volumes, a custom command and container health checks need a single-server (Docker) service")
 	}
 	if orch == "nomad" {
 		if cluster == nil {

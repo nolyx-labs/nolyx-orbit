@@ -226,6 +226,20 @@ func (s *Server) handleFrame(ctx context.Context, ac *agentConn, env protocol.En
 			return err
 		}
 		return s.storeNomad(ctx, ac, snap)
+
+	case protocol.TypeInventory:
+		var inv protocol.Inventory
+		if err := json.Unmarshal(env.Payload, &inv); err != nil {
+			return err
+		}
+		return s.storeInventory(ctx, ac.projectID, ac.serverID, inv)
+
+	case protocol.TypeSecurity:
+		var facts protocol.SecurityFacts
+		if err := json.Unmarshal(env.Payload, &facts); err != nil {
+			return err
+		}
+		return s.storeScan(ctx, ac.projectID, ac.serverID, facts)
 	}
 	return nil
 }
@@ -268,8 +282,10 @@ func (s *Server) storeContainers(ctx context.Context, ac *agentConn, snap protoc
 			switch {
 			case c.RestartCount > p.restarts:
 				events = append(events, [2]string{"warning", fmt.Sprintf("Container %s restarted (restart count %d)", c.Name, c.RestartCount)})
+				s.containerRestarted(ctx, ac, c.ID, c.Labels["orbit.app"], c.RestartCount-p.restarts)
 			case p.state == "running" && c.State != "running":
 				events = append(events, [2]string{"warning", fmt.Sprintf("Container %s is %s", c.Name, c.State)})
+				s.containerStopped(ctx, ac, c.ID, c.Labels["orbit.app"], c.State)
 			case p.state != "running" && c.State == "running":
 				events = append(events, [2]string{"info", fmt.Sprintf("Container %s started", c.Name)})
 			}

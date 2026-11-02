@@ -77,6 +77,7 @@ func (a *Agent) Run(ctx context.Context) error {
 	go a.reportDatabases(ctx)
 	go a.reportAppMetrics(ctx)
 	go a.reportNomad(ctx)
+	go a.reportInsight(ctx)
 	backoff := time.Second
 	for ctx.Err() == nil {
 		start := time.Now()

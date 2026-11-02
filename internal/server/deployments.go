@@ -24,15 +24,17 @@ type appRow struct {
 	CPUs                                                                        float64
 	MemoryMB, Instances                                                         int
 	RepoToken                                                                   []byte
+	Volumes, Command                                                            []string
+	HealthCmd                                                                   string
 }
 
 func (s *Server) startDeploy(ctx context.Context, p project, appID string, o deployOpts) (string, int, error) {
 	var a appRow
 	err := s.db.QueryRow(ctx, `select id::text, name, image, health_path, orchestrator, repo_url, branch, dockerfile, build_context, ports,
-		server_id::text, nomad_cluster_id::text, proxy, cpus, memory_mb, instances, repo_token_encrypted
+		server_id::text, nomad_cluster_id::text, proxy, cpus, memory_mb, instances, repo_token_encrypted, volumes, command, health_cmd
 		from applications where project_id = $1 and id::text = $2`, p.ID, appID).
 		Scan(&a.ID, &a.Name, &a.Image, &a.Health, &a.Orchestrator, &a.RepoURL, &a.Branch, &a.Dockerfile, &a.Context, &a.Ports,
-			&a.ServerID, &a.ClusterID, &a.Proxy, &a.CPUs, &a.MemoryMB, &a.Instances, &a.RepoToken)
+			&a.ServerID, &a.ClusterID, &a.Proxy, &a.CPUs, &a.MemoryMB, &a.Instances, &a.RepoToken, &a.Volumes, &a.Command, &a.HealthCmd)
 	if err != nil {
 		return "", 0, err
 	}
@@ -68,7 +70,8 @@ func (s *Server) startDeploy(ctx context.Context, p project, appID string, o dep
 		if !s.hub.connected(serverID) {
 			return "", 0, errOffline
 		}
-		d := protocol.DeployArgs{App: a.Name, Image: image, Ports: a.Ports, Env: env, HealthPath: a.Health, Proxy: a.Proxy, CPUs: a.CPUs, MemoryMB: a.MemoryMB}
+		d := protocol.DeployArgs{App: a.Name, Image: image, Ports: a.Ports, Env: env, HealthPath: a.Health, Proxy: a.Proxy, CPUs: a.CPUs, MemoryMB: a.MemoryMB,
+			Volumes: a.Volumes, Command: a.Command, HealthCmd: a.HealthCmd}
 		if o.Image == "" && a.RepoURL != "" {
 			branch := a.Branch
 			if branch == "" {
@@ -259,4 +262,5 @@ func (s *Server) finishDeployment(ctx context.Context, ac *agentConn, res protoc
 		s.event(ctx, ac.projectID, ac.serverID, "error", fmt.Sprintf("Deployment #%d of %s failed: %s", number, app, res.Error))
 	}
 	s.hub.publish(ac.projectID, "deployments", res.ID)
+	s.emit(ctx, ac.projectID, "deploy_finished", map[string]any{"service_id": appID, "service": app, "server_id": ac.serverID, "number": number, "status": status, "image": image, "error": res.Error})
 }

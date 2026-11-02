@@ -11,11 +11,23 @@ import { Server } from '../../lib/types'
 import { ServerConfig } from './ServerConfig'
 import { ServerContainers } from './ServerContainers'
 import { ServerEvents } from './ServerEvents'
+import { MaintenanceButton, MaintenanceWindows } from './ServerMaintenance'
 import { ServerMetrics } from './ServerMetrics'
 import { ServerOverview } from './ServerOverview'
 import { ServerServices } from './ServerServices'
+import { ServerUpdates } from './ServerUpdates'
 
-const SERVER_TABS = ['overview', 'containers', 'services', 'metrics', 'logs', 'events', 'terminal', 'configuration']
+const SERVER_TABS = [
+  'overview',
+  'containers',
+  'services',
+  'metrics',
+  'logs',
+  'events',
+  'terminal',
+  'configuration',
+  'updates',
+]
 
 export function ServerDetail() {
   const { project } = useProject()
@@ -51,7 +63,9 @@ export function ServerDetail() {
             <span className="muted">heartbeat {ago(s.last_seen_at)}</span>
           </span>
         }
-      />
+      >
+        <MaintenanceButton s={s} />
+      </PageHead>
       <div className="tabs">
         {SERVER_TABS.map((t) => (
           <NavLink key={t} to={`${base}/${t}`} className={t === tab ? 'active' : ''}>
@@ -59,6 +73,7 @@ export function ServerDetail() {
           </NavLink>
         ))}
       </div>
+      {tab === 'overview' && <MaintenanceWindows s={s} />}
       {tab === 'overview' && <ServerOverview s={s} />}
       {tab === 'containers' && <ServerContainers sid={s.id} />}
       {tab === 'services' && <ServerServices sid={s.id} />}
@@ -76,6 +91,7 @@ export function ServerDetail() {
         </Panel>
       )}
       {tab === 'configuration' && <ServerConfig s={s} />}
+      {tab === 'updates' && <ServerUpdates s={s} />}
     </div>
   )
 }
