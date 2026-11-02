@@ -11,7 +11,8 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-// pushConfig sends the agent the databases it should monitor (with credentials, over the authenticated session).
+// pushConfig sends the agent the databases it should monitor (with credentials, over the authenticated session),
+// the systemd services whose logs it collects and the monitors it checks as a location.
 func (s *Server) pushConfig(ctx context.Context, serverID string) error {
 	rows, err := s.db.Query(ctx, `select id::text, host, port, username, password_encrypted, dbname, sslmode
 		from databases where server_id::text = $1 and status not in ('provisioning','failed')`, serverID)
@@ -33,6 +34,23 @@ func (s *Server) pushConfig(ctx context.Context, serverID string) error {
 		}
 		c.Password = string(pw)
 		cfg.Databases = append(cfg.Databases, c)
+	}
+	rows.Close()
+	if err := s.db.QueryRow(ctx, `select log_units from servers where id::text = $1`, serverID).Scan(&cfg.LogUnits); err != nil {
+		return err
+	}
+	rows, err = s.db.Query(ctx, `select m.id::text, m.type, m.target, m.expected_status, m.keyword, m.timeout_ms, m.interval_seconds
+		from monitors m join servers sv on sv.id::text = $1 and sv.project_id = m.project_id where not m.paused and sv.id = any(m.locations)`, serverID)
+	if err != nil {
+		return err
+	}
+	for rows.Next() {
+		var m protocol.MonitorConfig
+		if err := rows.Scan(&m.ID, &m.Type, &m.Target, &m.ExpectedStatus, &m.Keyword, &m.TimeoutMS, &m.IntervalSeconds); err != nil {
+			rows.Close()
+			return err
+		}
+		cfg.Monitors = append(cfg.Monitors, m)
 	}
 	rows.Close()
 	return s.sendFrame(ctx, serverID, protocol.TypeConfig, cfg)

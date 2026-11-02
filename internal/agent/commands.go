@@ -112,6 +112,9 @@ func (a *Agent) exec(ctx context.Context, c *websocket.Conn, cmd protocol.Comman
 	if cmd.Action == protocol.ActionContainerExec {
 		return a.docker.Exec(cctx, args.ContainerID, args.Cmd, time.Duration(min(max(args.Timeout, 1), 55))*time.Second)
 	}
+	if cmd.Action == protocol.ActionContainerInspect {
+		return a.inspectForImport(cctx, args.ContainerID)
+	}
 	if cmd.Action == protocol.ActionContainerLogs {
 		return a.docker.Logs(cctx, args.ContainerID, args.Tail)
 	}

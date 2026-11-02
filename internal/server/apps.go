@@ -105,7 +105,7 @@ func (in appInput) validate() error {
 func (s *Server) appCols() string {
 	return `a.id, a.name, a.server_id, s.name as server_name, a.image, a.ports, a.env_keys, a.health_path, a.created_at,
 	a.proxy, a.cpus, a.memory_mb, a.orchestrator, a.nomad_cluster_id, a.instances, a.repo_url, a.branch, a.dockerfile, a.build_context,
-	a.repo_token_encrypted is not null as has_repo_token, a.auto_deploy, a.volumes, a.command, a.health_cmd,
+	a.repo_token_encrypted is not null as has_repo_token, a.auto_deploy, a.volumes, a.command, a.health_cmd, a.carried, a.import_container <> '' as importing,
 	case when a.repo_url <> '' then '` + strings.ReplaceAll(s.cfg.AppURL, "'", "") + `/hooks/github/' || a.id end as webhook_url,
 	(select row_to_json(c) from (select docker_id as id, state, status, health, cpu, mem_used from containers c
 	  where c.server_id = a.server_id and c.labels->>'orbit.app' = a.name order by created desc limit 1) c) as container,
@@ -249,12 +249,12 @@ func (s *Server) checkAppTargets(ctx context.Context, p project, appID string) e
 	var server, cluster *string
 	var dockerOnly bool
 	if err := s.db.QueryRow(ctx, `select orchestrator, repo_url, server_id::text, nomad_cluster_id::text,
-		volumes <> '[]' or command <> '[]' or health_cmd <> '' from applications where id::text = $1`, appID).
+		volumes <> '[]' or command <> '[]' or health_cmd <> '' or carried <> '{}' from applications where id::text = $1`, appID).
 		Scan(&orch, &repo, &server, &cluster, &dockerOnly); err != nil {
 		return err
 	}
 	if orch == "nomad" && dockerOnly {
-		return errStatus(400, "volumes, a custom command and container health checks need a single-server (Docker) service")
+		return errStatus(400, "volumes, a custom command, container health checks and imported settings need a single-server (Docker) service")
 	}
 	if orch == "nomad" {
 		if cluster == nil {
@@ -341,6 +341,9 @@ func (s *Server) updateApp(w http.ResponseWriter, r *http.Request) error {
 	aid := r.PathValue("aid")
 	var name string
 	if err := s.db.QueryRow(r.Context(), `select name from applications where project_id = $1 and id::text = $2`, p.ID, aid).Scan(&name); err != nil {
+		return err
+	}
+	if err := s.guardHostMounts(r.Context(), p, aid, ""); err != nil {
 		return err
 	}
 	env, err := s.loadEnv(r.Context(), aid)

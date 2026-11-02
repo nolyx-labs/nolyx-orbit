@@ -61,6 +61,8 @@ type DeployArgs struct {
 	Volumes    []string          `json:"volumes,omitempty"`    // "name:/path", mounted from the Docker volume VolumeName(App, name)
 	Command    []string          `json:"command,omitempty"`    // replaces the image's CMD
 	HealthCmd  string            `json:"health_cmd,omitempty"` // Docker HEALTHCHECK (shell); the deploy waits for "healthy"
+	Carry      *Carried          `json:"carry,omitempty"`      // settings imported from an existing container
+	Adopt      string            `json:"adopt,omitempty"`      // container being imported: replaced like a previous deploy, but kept stopped
 }
 
 // BuildArgs builds Image from a git repository with the Docker daemon's remote-context build.

@@ -55,6 +55,7 @@ export interface Insight {
     errors?: string[]
   } | null
   inventory_at: string | null
+  log_units: string[]
   scan: {
     container: boolean
     firewall: { tool: string; active: boolean; incoming: string; outgoing: string; rules: FirewallRule[] | null }

@@ -25,16 +25,17 @@ type appRow struct {
 	MemoryMB, Instances                                                         int
 	RepoToken                                                                   []byte
 	Volumes, Command                                                            []string
-	HealthCmd                                                                   string
+	HealthCmd, ImportContainer                                                  string
+	Carried                                                                     protocol.Carried
 }
 
 func (s *Server) startDeploy(ctx context.Context, p project, appID string, o deployOpts) (string, int, error) {
 	var a appRow
 	err := s.db.QueryRow(ctx, `select id::text, name, image, health_path, orchestrator, repo_url, branch, dockerfile, build_context, ports,
-		server_id::text, nomad_cluster_id::text, proxy, cpus, memory_mb, instances, repo_token_encrypted, volumes, command, health_cmd
-		from applications where project_id = $1 and id::text = $2`, p.ID, appID).
+		server_id::text, nomad_cluster_id::text, proxy, cpus, memory_mb, instances, repo_token_encrypted, volumes, command, health_cmd,
+		carried, import_container from applications where project_id = $1 and id::text = $2`, p.ID, appID).
 		Scan(&a.ID, &a.Name, &a.Image, &a.Health, &a.Orchestrator, &a.RepoURL, &a.Branch, &a.Dockerfile, &a.Context, &a.Ports,
-			&a.ServerID, &a.ClusterID, &a.Proxy, &a.CPUs, &a.MemoryMB, &a.Instances, &a.RepoToken, &a.Volumes, &a.Command, &a.HealthCmd)
+			&a.ServerID, &a.ClusterID, &a.Proxy, &a.CPUs, &a.MemoryMB, &a.Instances, &a.RepoToken, &a.Volumes, &a.Command, &a.HealthCmd, &a.Carried, &a.ImportContainer)
 	if err != nil {
 		return "", 0, err
 	}
@@ -71,7 +72,13 @@ func (s *Server) startDeploy(ctx context.Context, p project, appID string, o dep
 			return "", 0, errOffline
 		}
 		d := protocol.DeployArgs{App: a.Name, Image: image, Ports: a.Ports, Env: env, HealthPath: a.Health, Proxy: a.Proxy, CPUs: a.CPUs, MemoryMB: a.MemoryMB,
-			Volumes: a.Volumes, Command: a.Command, HealthCmd: a.HealthCmd}
+			Volumes: a.Volumes, Command: a.Command, HealthCmd: a.HealthCmd, Adopt: a.ImportContainer}
+		if len(a.Carried.Mounts)+len(a.Carried.Networks)+len(a.Carried.HostIPs)+len(a.Carried.Labels) > 0 {
+			d.Carry = &a.Carried
+		}
+		if a.ImportContainer != "" && a.Proxy {
+			return "", 0, errStatus(400, "turn off zero-downtime deploys until the import's first deploy has succeeded")
+		}
 		if o.Image == "" && a.RepoURL != "" {
 			branch := a.Branch
 			if branch == "" {
@@ -137,6 +144,11 @@ func (s *Server) deployApp(w http.ResponseWriter, r *http.Request) error {
 	if err := s.db.QueryRow(r.Context(), `select name from applications where project_id = $1 and id::text = $2`, p.ID, r.PathValue("aid")).Scan(&name); err != nil {
 		return err
 	}
+	if body.Image != "" {
+		if err := s.guardHostMounts(r.Context(), p, r.PathValue("aid"), body.Image); err != nil {
+			return err
+		}
+	}
 	s.auditProject(r, p, "app.deploy", name, map[string]any{"image": body.Image})
 	id, number, err := s.startDeploy(r.Context(), p, r.PathValue("aid"), deployOpts{Image: body.Image, UserID: u.ID, Actor: u.label()})
 	if err != nil {
@@ -171,6 +183,9 @@ func (s *Server) promoteApp(w http.ResponseWriter, r *http.Request) error {
 	var targetApp string
 	if err := s.db.QueryRow(r.Context(), `select id::text from applications where project_id = $1 and name = $2`, target.ID, name).Scan(&targetApp); err != nil {
 		return errStatus(400, "the target project has no service named %s", name)
+	}
+	if err := s.guardHostMounts(r.Context(), target, targetApp, body.Image); err != nil {
+		return err
 	}
 	if strings.HasPrefix(body.Image, "orbit/") {
 		return errStatus(400, "images built by Orbit live on one server; push to a registry to promote across projects")
@@ -256,6 +271,9 @@ func (s *Server) finishDeployment(ctx context.Context, ac *agentConn, res protoc
 		return // not a deployment
 	}
 	s.deploymentAlert(ctx, ac.projectID, appID, app, number, res.OK)
+	if res.OK { // an imported container has been replaced; later deploys replace the service's own containers
+		s.db.Exec(ctx, `update applications set import_container = '' where id::text = $1`, appID)
+	}
 	if res.OK {
 		s.event(ctx, ac.projectID, ac.serverID, "info", fmt.Sprintf("Deployment #%d of %s completed (%s)", number, app, image))
 	} else {

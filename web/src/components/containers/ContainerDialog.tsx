@@ -10,6 +10,7 @@ import { RangePicker } from '../ui/controls'
 import { Dialog } from '../ui/Dialog'
 import { ErrorNote } from '../ui/states'
 import { Badge, StatusText, containerTone } from '../ui/status'
+import { ImportDialog, importable } from './ImportDialog'
 
 type Act = 'start' | 'stop' | 'restart' | 'remove'
 
@@ -32,6 +33,7 @@ export function ContainerDialog({
   const [logs, logsErr, reloadLogs] = useApi<{ logs: string }>(tab === 'logs' ? `${base}/logs?tail=${tail}` : null)
   const [metrics] = useApi<Series>(tab === 'metrics' ? `${base}/metrics?range=${range}` : null)
   const [confirm, setConfirm] = useState<Act | null>(null)
+  const [importing, setImporting] = useState(false)
   const [filter, setFilter] = useState('')
   const running = c.state === 'running'
 
@@ -70,6 +72,11 @@ export function ContainerDialog({
             ) : (
               <button className="btn sm" onClick={() => setConfirm('start')}>
                 Start
+              </button>
+            )}
+            {canRemove && importable(c) && (
+              <button className="btn sm" onClick={() => setImporting(true)}>
+                Import as a service
               </button>
             )}
             {canRemove && (
@@ -206,6 +213,7 @@ export function ContainerDialog({
           </div>
         </div>
       )}
+      {importing && <ImportDialog c={c} onClose={() => setImporting(false)} />}
       {confirm && (
         <Confirm
           title={`${confirm[0].toUpperCase() + confirm.slice(1)} ${c.name}?`}

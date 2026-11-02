@@ -18,7 +18,7 @@ var appName = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,62}$`)
 //   - proxy mode: the new container's first port isn't published; once it's healthy on its bridge IP the
 //     agent's proxy switches traffic to it and the old container is drained and removed. No downtime.
 func (a *Agent) deploy(ctx context.Context, id string, args protocol.DeployArgs, progress func(protocol.Progress)) (err error) {
-	if !appName.MatchString(args.App) || args.Image == "" || (args.Proxy && len(args.Ports) == 0) {
+	if !appName.MatchString(args.App) || args.Image == "" || (args.Proxy && len(args.Ports) == 0) || (args.Proxy && args.Adopt != "") {
 		return fmt.Errorf("invalid app name, image or ports")
 	}
 	step := stepper(progress)
@@ -57,10 +57,23 @@ func (a *Agent) deploy(ctx context.Context, id string, args protocol.DeployArgs,
 	if err != nil {
 		return err
 	}
+	var adopted inspectedContainer // import.go: the unmanaged container this deploy replaces
+	if args.Adopt != "" {
+		if err := a.docker.Inspect(ctx, args.Adopt, &adopted); err != nil {
+			return fmt.Errorf("the container being imported is gone: %w", err)
+		}
+	}
 	var stopped []string
 	if !args.Proxy {
 		if err := step("Stopping previous", func() error {
 			a.proxy.remove(args.App)
+			if adopted.State.Running {
+				log("stopping %s, the container being imported", strings.TrimPrefix(adopted.Name, "/"))
+				if err := a.docker.Action(ctx, protocol.ActionContainerStop, adopted.ID); err != nil {
+					return err
+				}
+				stopped = append(stopped, adopted.ID)
+			}
 			for _, c := range old {
 				if c.State == "running" {
 					log("stopping %s", c.ID[:12])
@@ -103,9 +116,11 @@ func (a *Agent) deploy(ctx context.Context, id string, args protocol.DeployArgs,
 		if err := a.docker.ensureNetwork(ctx); err != nil {
 			return err
 		}
-		newID, err = a.docker.CreateRaw(ctx, name, body)
+		if newID, err = a.docker.CreateRaw(ctx, name, body); err != nil {
+			return err
+		}
 		log("created %s", name)
-		return err
+		return a.docker.joinCarriedNetworks(ctx, args.Carry, newID)
 	}); err != nil {
 		return err
 	}
@@ -153,6 +168,14 @@ func (a *Agent) deploy(ctx context.Context, id string, args protocol.DeployArgs,
 				log("remove %s: %v", c.ID[:12], err)
 			}
 		}
+		if adopted.ID != "" {
+			old := strings.TrimPrefix(adopted.Name, "/")
+			if err := a.docker.retire(ctx, adopted.ID, old); err != nil {
+				log("keep %s as a fallback: %v", old, err)
+			} else {
+				log("kept the original container, stopped, as %s-before-orbit; remove it once you're happy", old)
+			}
+		}
 		return nil
 	})
 }
@@ -183,7 +206,10 @@ func createBody(args protocol.DeployArgs) (map[string]any, error) {
 	hc["PortBindings"] = bindings
 	hc["RestartPolicy"] = map[string]string{"Name": "unless-stopped"}
 	body := map[string]any{"Image": args.Image, "Env": env, "Labels": labels, "ExposedPorts": exposed, "HostConfig": hc}
-	return body, serviceOptions(args, body, hc)
+	if err := serviceOptions(args, body, hc); err != nil {
+		return nil, err
+	}
+	return body, applyCarried(args.Carry, body, hc)
 }
 
 // upstreamAddr is the container's bridge IP and target port, used by the proxy.

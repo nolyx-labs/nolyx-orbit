@@ -152,6 +152,31 @@ export function ServiceDetail() {
               <div className="mono">
                 {a.cpus ? `${a.cpus} CPU` : 'no CPU limit'} · {a.memory_mb ? `${a.memory_mb} MB` : 'no memory limit'}
               </div>
+              {!!a.carried.mounts?.length && (
+                <>
+                  <div className="k">Imported mounts</div>
+                  <div className="mono" style={{ wordBreak: 'break-all' }}>
+                    {a.carried.mounts.map((m) => (
+                      <div key={m.target}>
+                        {m.type === 'tmpfs' ? 'tmpfs' : m.source} → {m.target}
+                        {m.read_only && ' (read-only)'}
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+              {!!a.carried.networks?.length && (
+                <>
+                  <div className="k">Imported networks</div>
+                  <div className="mono">{a.carried.networks.map((n) => n.name).join(', ')}</div>
+                </>
+              )}
+              {a.importing && (
+                <>
+                  <div className="k">Import</div>
+                  <div className="muted">The next deploy replaces the original container</div>
+                </>
+              )}
               <div className="k">Strategy</div>
               <div className="muted">
                 {nomad

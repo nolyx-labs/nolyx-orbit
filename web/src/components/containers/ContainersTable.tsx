@@ -4,6 +4,7 @@ import { Container } from '../../lib/types'
 import { Empty } from '../ui/states'
 import { StatusText, containerTone } from '../ui/status'
 import { ContainerDialog } from './ContainerDialog'
+import { importable } from './ImportDialog'
 
 export function ContainersTable({
   containers,
@@ -41,6 +42,7 @@ export function ContainersTable({
                   <div className="sub mono">
                     {c.id.slice(0, 12)}
                     {c.labels['orbit.app'] && <> · app {c.labels['orbit.app']}</>}
+                    {importable(c) && <> · not managed by Orbit</>}
                   </div>
                 </td>
                 {showServer && <td className="muted">{c.server_name}</td>}

@@ -21,6 +21,7 @@ export interface Monitor {
   expected_status: string
   keyword: string
   server_id: string | null
+  locations: string[]
   paused: boolean
   status: 'pending' | 'up' | 'down'
   last_checked_at: string | null
@@ -49,7 +50,7 @@ export function Monitors() {
     <div className="page">
       <PageHead
         title="Monitors"
-        sub="Uptime and response time for websites, APIs and ports, checked from this control plane"
+        sub="Uptime and response time for websites, APIs and ports, checked from this control plane and, if you choose, from your servers too"
       >
         {canEdit && (
           <button className="btn primary" onClick={() => setAdding(true)}>
@@ -129,6 +130,7 @@ export function MonitorDialog({
     server_id: monitor?.server_id ?? '',
     paused: monitor?.paused ?? false,
   })
+  const [locations, setLocations] = useState<string[]>(monitor?.locations ?? [])
   const [error, setError] = useState<string>()
   const set = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
     setF({ ...f, [k]: e.target.value })
@@ -138,6 +140,7 @@ export function MonitorDialog({
       `/projects/${project.id}/monitors${monitor ? `/${monitor.id}` : ''}`,
       {
         ...f,
+        locations,
         interval_seconds: +f.interval_seconds,
         timeout_ms: +f.timeout_ms,
       },
@@ -244,6 +247,30 @@ export function MonitorDialog({
           Maintenance on that server's status page component also pauses this monitor's alerts.
         </span>
       </label>
+      {!!servers?.length && (
+        <div className="field">
+          <span>Also check from</span>
+          <div className="checkbox-row">
+            {servers.map((s) => (
+              <label key={s.id}>
+                <input
+                  type="checkbox"
+                  checked={locations.includes(s.id)}
+                  onChange={(e) =>
+                    setLocations(e.target.checked ? [...locations, s.id] : locations.filter((x) => x !== s.id))
+                  }
+                />
+                {s.name}
+              </label>
+            ))}
+          </div>
+          <span className="hint">
+            Each server checks from where it is, as visitors there would. With extra locations, the monitor is down only
+            when more than half of them fail, so a network problem near one of them doesn't count as an outage. Servers
+            can't check private or local addresses.
+          </span>
+        </div>
+      )}
       {monitor && (
         <div className="checkbox-row">
           <label>

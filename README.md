@@ -6,10 +6,10 @@ Nolyx Orbit is a control plane that you run on your own server. Install a small 
 
 What you can do with it:
 
-- **Deploy:** run Docker services with zero-downtime deploys, Git push-to-deploy, releases and rollbacks.
+- **Deploy:** run Docker services with zero-downtime deploys, Git push-to-deploy, releases and rollbacks, or import containers and Compose services that are already running.
 - **Orchestrate:** run services across a Nomad cluster, or on a single server without Nomad.
 - **Databases:** monitor PostgreSQL, add read replicas, promote replicas, and schedule backups (including to S3).
-- **Observe:** metrics, searchable central logs, events, uptime monitors and alerts sent by email, Slack, Discord or webhook.
+- **Observe:** metrics, searchable central logs from containers and system services (optionally copied into your own PostgreSQL), events, uptime monitors checked from several locations, and alerts sent by email, Slack, Discord or webhook.
 - **Status pages:** public pages in the style of Atlassian Statuspage, with 90-day uptime, incidents, scheduled maintenance, email and webhook subscribers, feeds and custom domains.
 - **Secure:** secrets, API keys, teams with per-project roles, custom roles, and an audit log of every action.
 - **Provision:** create new servers in Hetzner Cloud with the agent pre-installed.
@@ -355,16 +355,17 @@ Areas in `internal/server`:
 - **Access:** `auth.go`, `sessions.go`, `members.go`, `teams.go`, `apikeys.go`, `audit.go`
 - **Agents:** `hub.go`, `agent_session.go`, `commands.go`, `enrollment.go`
 - **Infrastructure:** `servers.go`, `containers.go`, `metrics.go`, `overview.go`
-- **Services:** `apps.go`, `deployments.go`, `github.go`
+- **Services:** `apps.go`, `deployments.go`, `github.go`, `import.go`
 - **Databases:** `databases.go`, `database_monitoring.go`, `replicas.go`, `backups.go`, `operations.go`
-- **Observability:** `alerts.go`, `alert_rules.go`, `notifications.go`, `logs.go`
+- **Observability:** `alerts.go`, `alert_rules.go`, `notifications.go`, `logs.go`, `log_forwarding.go`, `monitors.go`
 - **Other:** `secrets.go`, `nomad.go`, `cloud.go`, `worker.go`
 
 Areas in `internal/agent`:
 
 - **Connection:** `agent.go` (connection lifecycle), `commands.go`
 - **Host:** `collect.go`, `host.go`
-- **Docker:** `docker.go`, `docker_ops.go`, `deploy.go`, `proxy.go`, `logs.go`
+- **Docker:** `docker.go`, `docker_ops.go`, `deploy.go`, `import.go`, `proxy.go`, `logs.go`
+- **Host:** `journal.go` (service logs), `monitors.go` (checks as a monitor location)
 - **PostgreSQL:** `postgres_monitor.go`, `postgres_manage.go`, `postgres_backup.go`
 - **Nomad:** `nomad.go`, `nomad_install.go`
 

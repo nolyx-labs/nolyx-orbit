@@ -178,6 +178,8 @@ var serviceActions = map[string]bool{"start": true, "stop": true, "restart": tru
 // unitName rejects anything systemctl could read as an option or a glob.
 var unitName = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9@._:\\-]{0,200}\.service$`)
 
+func ValidUnit(u string) bool { return unitName.MatchString(u) }
+
 func (a ServiceArgs) Validate() error {
 	if !unitName.MatchString(a.Unit) {
 		return fmt.Errorf("invalid unit name %q", a.Unit)

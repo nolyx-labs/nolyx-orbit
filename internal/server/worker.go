@@ -13,6 +13,7 @@ func (s *Server) RunWorker(ctx context.Context) {
 	defer slow.Stop()
 	s.retention(ctx)
 	go s.runMonitors(ctx)
+	go s.runLogForwarding(ctx) // its own loop: a slow customer database mustn't hold up alerts
 	for {
 		select {
 		case <-ctx.Done():

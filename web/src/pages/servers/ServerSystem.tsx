@@ -16,6 +16,7 @@ const tone = (s: SystemdService): Tone => (s.active === 'failed' ? 'err' : s.act
 export function ServerSystem({ sid }: { sid: string }) {
   const { project } = useProject()
   const canAct = useCan('member')
+  const canAdmin = useCan('admin')
   const [ins, loadError, reload] = useInsight(sid)
   const [show, setShow] = useState<(typeof SHOW)[number]>('running')
   const [q, setQ] = useState('')
@@ -31,6 +32,12 @@ export function ServerSystem({ sid }: { sid: string }) {
     act(unit, action)
       .catch((e) => setError(e.message))
       .finally(() => setBusy(''))
+  }
+
+  const collect = (unit: string, on: boolean) => {
+    const units = on ? [...(ins?.log_units ?? []), unit] : (ins?.log_units ?? []).filter((u) => u !== unit)
+    setError(undefined)
+    api('PUT', `/projects/${project.id}/servers/${sid}/log-units`, { units }).then(reload, (e) => setError(e.message))
   }
 
   if (loadError) return <Empty title={loadError} />
@@ -74,6 +81,7 @@ export function ServerSystem({ sid }: { sid: string }) {
                   <th>State</th>
                   <th>Starts at boot</th>
                   <th className="right">Memory</th>
+                  <th title="Send this service's journal to the Logs page">Collect logs</th>
                   {canAct && <th className="right">Actions</th>}
                 </tr>
               </thead>
@@ -93,6 +101,22 @@ export function ServerSystem({ sid }: { sid: string }) {
                       </td>
                       <td className="muted">{s.enabled || '—'}</td>
                       <td className="right mono">{s.memory ? bytes(s.memory) : '—'}</td>
+                      <td>
+                        <input
+                          type="checkbox"
+                          aria-label={`Collect logs from ${s.unit}`}
+                          checked={ins.log_units.includes(s.unit)}
+                          disabled={!canAdmin || !!ins.scan?.container}
+                          title={
+                            ins.scan?.container
+                              ? 'The agent runs in a container and can’t read the server’s journal'
+                              : !canAdmin
+                                ? 'Admins choose which services’ logs are collected'
+                                : undefined
+                          }
+                          onChange={(e) => collect(s.unit, e.target.checked)}
+                        />
+                      </td>
                       {canAct && (
                         <td className="right nowrap">
                           {busy === s.unit ? (
@@ -124,7 +148,10 @@ export function ServerSystem({ sid }: { sid: string }) {
           </div>
         )}
       </Panel>
-      <Panel title="Docker Compose projects">
+      <Panel
+        title="Docker Compose projects"
+        actions={<span className="faint">Open a container on the Containers tab to import it as a service</span>}
+      >
         {!inv?.compose.length ? (
           <Empty title="No Compose projects found" />
         ) : (

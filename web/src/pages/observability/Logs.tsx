@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router'
-import { useProject } from '../../components/layout/context'
+import { useCan, useProject } from '../../components/layout/context'
 import { RANGES, Segmented } from '../../components/ui/controls'
 import { PageHead } from '../../components/ui/PageHead'
 import { Panel } from '../../components/ui/Panel'
@@ -8,6 +8,7 @@ import { Empty, Loading } from '../../components/ui/states'
 import { useApi } from '../../lib/api'
 import { useLive } from '../../lib/live'
 import { Server } from '../../lib/types'
+import { LogDestination } from './LogDestination'
 
 interface Line {
   id: number
@@ -17,6 +18,7 @@ interface Line {
   line: string
   container: string
   app: string
+  unit: string
   server_id: string
   server_name: string
 }
@@ -34,13 +36,16 @@ export function Logs() {
   const server = params.get('server') ?? ''
   const app = params.get('app') ?? ''
   const container = params.get('container') ?? ''
+  const unit = params.get('unit') ?? ''
+  const canAdmin = useCan('admin')
+  const [forwarding, setForwarding] = useState(false)
   const [servers] = useApi<Server[]>(`/projects/${project.id}/servers`)
   const [apps] = useApi<{ name: string }[]>(`/projects/${project.id}/apps`)
   useEffect(() => {
     const t = setTimeout(() => setDebounced(q), 250)
     return () => clearTimeout(t)
   }, [q])
-  const qs = new URLSearchParams({ q: debounced, range, level: levels.join(','), server, app, container })
+  const qs = new URLSearchParams({ q: debounced, range, level: levels.join(','), server, app, container, unit })
   const [lines, error, reload] = useApi<Line[]>(`/projects/${project.id}/logs?${qs}`)
   useLive(project.id, live ? ['logs'] : [], reload, 3000)
   const setParam = (k: string, v: string) => {
@@ -52,8 +57,13 @@ export function Logs() {
     <div className="page">
       <PageHead
         title="Logs"
-        sub="Container logs from every server, shipped by the agent and kept for 7 days. Passwords, tokens and keys are masked on each server before they're sent."
+        sub="Container logs from every server, plus the system services you choose on a server's System tab, kept for 7 days. Passwords, tokens and keys are masked on each server before they're sent."
       >
+        {canAdmin && (
+          <button className="btn sm" onClick={() => setForwarding(true)}>
+            Copy to your database
+          </button>
+        )}
         <label className="row muted" style={{ fontSize: 12 }}>
           <input type="checkbox" checked={live} onChange={(e) => setLive(e.target.checked)} /> Live
         </label>
@@ -100,6 +110,11 @@ export function Logs() {
             container: {container} ×
           </button>
         )}
+        {unit && (
+          <button className="btn sm" onClick={() => setParam('unit', '')}>
+            service: {unit} ×
+          </button>
+        )}
         <div className="checkbox-row">
           {LEVELS.map((l) => (
             <label key={l}>
@@ -139,15 +154,15 @@ export function Logs() {
                   })}
                 </span>
                 <span className={`lvl ${l.level}`}>{l.level}</span>
-                <span className="src" title={`${l.server_name} / ${l.container}`}>
+                <span className="src" title={`${l.server_name} / ${l.container || l.unit}`}>
                   <a
                     href="#"
                     onClick={(e) => {
                       e.preventDefault()
-                      setParam('container', l.container)
+                      l.container ? setParam('container', l.container) : setParam('unit', l.unit)
                     }}
                   >
-                    {l.app || l.container}
+                    {l.app || l.container || l.unit}
                   </a>
                   <span className="faint"> · {l.server_name}</span>
                 </span>
@@ -162,6 +177,7 @@ export function Logs() {
           </div>
         )}
       </Panel>
+      {forwarding && <LogDestination onClose={() => setForwarding(false)} />}
     </div>
   )
 }

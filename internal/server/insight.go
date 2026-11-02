@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"orbit/internal/protocol"
+	"slices"
 	"strings"
 )
 
@@ -114,7 +115,7 @@ func (s *Server) getInsight(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
-	out, err := s.one(r.Context(), `select i.inventory, i.inventory_at, i.scan, i.scan_at
+	out, err := s.one(r.Context(), `select i.inventory, i.inventory_at, i.scan, i.scan_at, s.log_units
 		from servers s left join server_insight i on i.server_id = s.id where s.project_id = $1 and s.id::text = $2`, p.ID, r.PathValue("sid"))
 	if err != nil {
 		return err
@@ -249,4 +250,37 @@ func (s *Server) dockerPrune(w http.ResponseWriter, r *http.Request) error {
 		name, float64(out.Reclaimed)/1e9, currentUser(r).Email))
 	writeJSON(w, 200, out)
 	return nil
+}
+
+// setLogUnits chooses the systemd services whose journal is collected with the container logs. Admin: service
+// logs can hold more than an app's (auth attempts, other users' commands), even after redaction.
+func (s *Server) setLogUnits(w http.ResponseWriter, r *http.Request) error {
+	p, name, err := s.insightServer(r, "admin")
+	if err != nil {
+		return err
+	}
+	var in struct {
+		Units []string `json:"units"`
+	}
+	if err := decode(r, &in); err != nil {
+		return err
+	}
+	if len(in.Units) > 50 {
+		return errStatus(400, "collect logs from at most 50 services per server")
+	}
+	units := []string{}
+	for _, u := range in.Units {
+		if !protocol.ValidUnit(u) {
+			return errStatus(400, "invalid service name %q", u)
+		}
+		if !slices.Contains(units, u) {
+			units = append(units, u)
+		}
+	}
+	if _, err := s.db.Exec(r.Context(), `update servers set log_units = $2 where id::text = $1`, r.PathValue("sid"), units); err != nil {
+		return err
+	}
+	s.auditProject(r, p, "server.log_units", name, map[string]any{"units": units})
+	s.pushConfig(r.Context(), r.PathValue("sid"))
+	return s.getInsight(w, r)
 }

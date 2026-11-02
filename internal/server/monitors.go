@@ -1,12 +1,11 @@
-// Uptime monitors: HTTP and TCP checks run from the control plane, with outages and uptime history.
+// Uptime monitors: HTTP and TCP checks run from the control plane, and optionally from servers as extra locations,
+// with outages and uptime history.
 package server
 
 import (
 	"context"
-	"crypto/tls"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net"
 	"net/http"
 	"net/url"
@@ -15,19 +14,14 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+
+	"orbit/internal/protocol"
+	"orbit/internal/uptime"
 )
 
 type monitor struct {
 	ID, ProjectID, Name, Type, Target, ExpectedStatus, Keyword string
 	TimeoutMS                                                  int
-}
-
-type checkResult struct {
-	OK         bool       `json:"ok"`
-	LatencyMS  int        `json:"latency_ms"`
-	StatusCode int        `json:"status_code,omitempty"`
-	Error      string     `json:"error,omitempty"`
-	CertExpiry *time.Time `json:"cert_expires_at,omitempty"`
 }
 
 // runMonitors claims due monitors every few seconds and checks them concurrently.
@@ -65,91 +59,20 @@ func (s *Server) runMonitors(ctx context.Context) {
 	}
 }
 
-func (s *Server) check(ctx context.Context, m monitor) checkResult {
-	ctx, cancel := context.WithTimeout(ctx, time.Duration(m.TimeoutMS)*time.Millisecond)
-	defer cancel()
-	start := time.Now()
-	res := checkResult{}
-	done := func(err error) checkResult {
-		res.LatencyMS = int(time.Since(start).Milliseconds())
-		if err != nil {
-			res.Error = trunc(err.Error(), 300)
-		} else {
-			res.OK = true
-		}
-		return res
-	}
-	if m.Type == "tcp" {
-		conn, err := s.safeDialer().DialContext(ctx, "tcp", m.Target)
-		if err == nil {
-			conn.Close()
-		}
-		return done(err)
-	}
-	req, err := http.NewRequestWithContext(ctx, "GET", m.Target, nil)
-	if err != nil {
-		return done(err)
-	}
-	req.Header.Set("User-Agent", "NolyxOrbit-Monitor/1")
-	client := &http.Client{Transport: &http.Transport{DialContext: s.safeDialer().DialContext, TLSClientConfig: &tls.Config{}, DisableKeepAlives: true}}
-	resp, err := client.Do(req)
-	if err != nil {
-		return done(err)
-	}
-	defer resp.Body.Close()
-	res.StatusCode = resp.StatusCode
-	if resp.TLS != nil && len(resp.TLS.PeerCertificates) > 0 {
-		exp := resp.TLS.PeerCertificates[0].NotAfter
-		res.CertExpiry = &exp
-	}
-	if !statusMatches(m.ExpectedStatus, resp.StatusCode) {
-		return done(fmt.Errorf("unexpected status %d (expected %s)", resp.StatusCode, m.ExpectedStatus))
-	}
-	if m.Keyword != "" {
-		body, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
-		if !strings.Contains(string(body), m.Keyword) {
-			return done(fmt.Errorf("response doesn't contain %q", m.Keyword))
-		}
-	}
-	return done(nil)
+func (s *Server) check(ctx context.Context, m monitor) protocol.MonitorResult {
+	return uptime.Check(ctx, protocol.MonitorConfig{ID: m.ID, Type: m.Type, Target: m.Target, ExpectedStatus: m.ExpectedStatus,
+		Keyword: m.Keyword, TimeoutMS: m.TimeoutMS}, s.safeDialer())
 }
 
-// statusMatches checks an HTTP status against a spec like "2xx", "200" or "200-299,301".
-func statusMatches(spec string, code int) bool {
-	for _, p := range strings.Split(spec, ",") {
-		p = strings.ToLower(strings.TrimSpace(p))
-		if len(p) == 3 && strings.HasSuffix(p, "xx") {
-			if code/100 == int(p[0]-'0') {
-				return true
-			}
-			continue
-		}
-		lo, hi, isRange := strings.Cut(p, "-")
-		a, err := strconv.Atoi(lo)
-		if err != nil {
-			continue
-		}
-		b := a
-		if isRange {
-			if b, err = strconv.Atoi(hi); err != nil {
-				continue
-			}
-		}
-		if code >= a && code <= b {
-			return true
-		}
-	}
-	return false
-}
-
-// recordCheck stores a result and opens or closes an outage. Two failures in a row mark a monitor down,
-// so one dropped packet isn't an outage. Alert rules on monitor_down pick the change up (alertSQL).
-func (s *Server) recordCheck(ctx context.Context, m monitor, r checkResult) {
+// recordCheck stores a control-plane result and opens or closes an outage. Two failures in a row mark a monitor
+// down, so one dropped packet isn't an outage. Alert rules on monitor_down pick the change up (alertSQL).
+func (s *Server) recordCheck(ctx context.Context, m monitor, r protocol.MonitorResult) {
 	if _, err := s.db.Exec(ctx, `insert into monitor_checks (monitor_id, ok, latency_ms, status_code, error) values ($1,$2,$3,nullif($4,0),$5)`,
 		m.ID, r.OK, r.LatencyMS, r.StatusCode, r.Error); err != nil {
 		s.log.Error("record check", "monitor", m.Name, "err", err)
 		return
 	}
+	r = s.vote(ctx, m.ID, r)
 	var before, after string
 	err := s.db.QueryRow(ctx, `with prev as (select status from monitors where id = $1)
 		update monitors set
@@ -163,8 +86,8 @@ func (s *Server) recordCheck(ctx context.Context, m monitor, r checkResult) {
 	switch {
 	case before != "down" && after == "down":
 		s.db.Exec(ctx, `insert into monitor_outages (monitor_id, started_at, error)
-			select $1, coalesce((select min(ts) from monitor_checks where monitor_id = $1 and ts > coalesce(
-			  (select max(ts) from monitor_checks where monitor_id = $1 and ok), '-infinity')), now()), $2
+			select $1, coalesce((select min(ts) from monitor_checks where monitor_id = $1 and location is null and ts > coalesce(
+			  (select max(ts) from monitor_checks where monitor_id = $1 and location is null and ok), '-infinity')), now()), $2
 			on conflict do nothing`, m.ID, r.Error)
 		s.event(ctx, m.ProjectID, "", "error", "Monitor "+m.Name+" is down: "+r.Error)
 		s.emit(ctx, m.ProjectID, "monitor_down", map[string]any{"monitor_id": m.ID, "monitor": m.Name, "error": r.Error})
@@ -179,15 +102,16 @@ func (s *Server) recordCheck(ctx context.Context, m monitor, r checkResult) {
 }
 
 type monitorInput struct {
-	Name            string `json:"name"`
-	Type            string `json:"type"`
-	Target          string `json:"target"`
-	IntervalSeconds int    `json:"interval_seconds"`
-	TimeoutMS       int    `json:"timeout_ms"`
-	ExpectedStatus  string `json:"expected_status"`
-	Keyword         string `json:"keyword"`
-	ServerID        string `json:"server_id"`
-	Paused          bool   `json:"paused"`
+	Name            string   `json:"name"`
+	Type            string   `json:"type"`
+	Target          string   `json:"target"`
+	IntervalSeconds int      `json:"interval_seconds"`
+	TimeoutMS       int      `json:"timeout_ms"`
+	ExpectedStatus  string   `json:"expected_status"`
+	Keyword         string   `json:"keyword"`
+	ServerID        string   `json:"server_id"`
+	Locations       []string `json:"locations"` // servers that also check it
+	Paused          bool     `json:"paused"`
 }
 
 func (in *monitorInput) validate() error {
@@ -246,7 +170,7 @@ func validStatusSpec(p string) bool {
 	return true
 }
 
-const monitorColumns = `id, name, type, target, interval_seconds, timeout_ms, expected_status, keyword, server_id, paused, status,
+const monitorColumns = `id, name, type, target, interval_seconds, timeout_ms, expected_status, keyword, server_id, locations, paused, status,
 	last_checked_at, last_latency_ms, last_error, cert_expires_at, created_at,
 	monitor_uptime(id, now() - interval '1 day') uptime_24h, monitor_uptime(id, now() - interval '30 days') uptime_30d`
 
@@ -279,7 +203,10 @@ func (s *Server) getMonitor(w http.ResponseWriter, r *http.Request) error {
 		(select json_build_object('t', coalesce(json_agg(extract(epoch from t)::bigint order by t), '[]'),
 		   'latency', coalesce(json_agg(latency order by t), '[]'), 'failed', coalesce(json_agg(failed order by t), '[]'))
 		 from (select date_bin($3::interval, ts, 'epoch') t, round(avg(latency_ms)) latency, count(*) filter (where not ok) failed
-		   from monitor_checks where monitor_id = m.id and ts > now() - $4::interval group by 1) b) series
+		   from monitor_checks where monitor_id = m.id and location is null and ts > now() - $4::interval group by 1) b) series,
+		(select coalesce(json_agg(l order by l.name), '[]') from (select sv.id server_id, sv.name, c.ok, c.latency_ms, c.error, c.ts
+		   from servers sv left join lateral (select ok, latency_ms, error, ts from monitor_checks
+		     where monitor_id = m.id and location = sv.id order by ts desc limit 1) c on true where sv.id = any(m.locations)) l) location_results
 		from monitors m where project_id = $1 and id::text = $2`, p.ID, r.PathValue("id"), step.String(), rng.String())
 	if err == pgx.ErrNoRows {
 		return errStatus(404, "monitor not found")
@@ -309,19 +236,31 @@ func (s *Server) saveMonitor(w http.ResponseWriter, r *http.Request) error {
 			return errStatus(400, "server not found")
 		}
 	}
-	args := []any{p.ID, in.Name, in.Type, in.Target, in.IntervalSeconds, in.TimeoutMS, in.ExpectedStatus, in.Keyword, nilIfEmpty(in.ServerID), in.Paused}
+	if in.Locations == nil {
+		in.Locations = []string{}
+	}
+	if len(in.Locations) > 10 {
+		return errStatus(400, "check from at most 10 servers")
+	}
+	var found int
+	s.db.QueryRow(r.Context(), `select count(*) from servers where project_id = $1 and id::text = any($2)`, p.ID, in.Locations).Scan(&found)
+	if found != len(in.Locations) {
+		return errStatus(400, "check locations must be servers in this project")
+	}
+	before := s.monitorLocations(r.Context(), r.PathValue("id"))
+	args := []any{p.ID, in.Name, in.Type, in.Target, in.IntervalSeconds, in.TimeoutMS, in.ExpectedStatus, in.Keyword, nilIfEmpty(in.ServerID), in.Paused, in.Locations}
 	var out json.RawMessage
 	if id := r.PathValue("id"); id == "" {
-		out, err = s.one(r.Context(), `insert into monitors (project_id, name, type, target, interval_seconds, timeout_ms, expected_status, keyword, server_id, paused)
-			values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) returning id`, args...)
+		out, err = s.one(r.Context(), `insert into monitors (project_id, name, type, target, interval_seconds, timeout_ms, expected_status, keyword, server_id, paused, locations)
+			values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11::uuid[]) returning id`, args...)
 		s.auditProject(r, p, "monitor.create", in.Name, map[string]any{"target": in.Target})
 	} else {
 		// A changed target starts a fresh check cycle; pausing ends any open outage so it doesn't count as downtime.
 		out, err = s.one(r.Context(), `update monitors set name = $2, type = $3, target = $4, interval_seconds = $5, timeout_ms = $6,
-			expected_status = $7, keyword = $8, server_id = $9, paused = $10, next_check_at = now(),
+			expected_status = $7, keyword = $8, server_id = $9, paused = $10, locations = $11::uuid[], next_check_at = now(),
 			status = case when $10 or target <> $4 then 'pending' else status end,
 			fail_streak = case when $10 or target <> $4 then 0 else fail_streak end
-			where project_id = $1 and id::text = $11 returning id`, append(args, id)...)
+			where project_id = $1 and id::text = $12 returning id`, append(args, id)...)
 		if err == nil && in.Paused {
 			s.db.Exec(r.Context(), `update monitor_outages set ended_at = now() where monitor_id::text = $1 and ended_at is null`, id)
 		}
@@ -332,6 +271,7 @@ func (s *Server) saveMonitor(w http.ResponseWriter, r *http.Request) error {
 	} else if err != nil {
 		return err
 	}
+	s.pushMonitorLocations(r.Context(), append(before, in.Locations...))
 	s.hub.publish(p.ID, "monitors", "")
 	writeJSON(w, 200, out)
 	return nil
@@ -343,9 +283,12 @@ func (s *Server) deleteMonitor(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	var name string
-	if err := s.db.QueryRow(r.Context(), `delete from monitors where project_id = $1 and id::text = $2 returning name`, p.ID, r.PathValue("id")).Scan(&name); err != nil {
+	var locations []string
+	if err := s.db.QueryRow(r.Context(), `delete from monitors where project_id = $1 and id::text = $2 returning name, locations::text[]`,
+		p.ID, r.PathValue("id")).Scan(&name, &locations); err != nil {
 		return err
 	}
+	s.pushMonitorLocations(r.Context(), locations)
 	s.auditProject(r, p, "monitor.delete", name, nil)
 	s.hub.publish(p.ID, "monitors", "")
 	w.WriteHeader(204)
@@ -368,4 +311,65 @@ func (s *Server) checkMonitorNow(w http.ResponseWriter, r *http.Request) error {
 	s.recordCheck(r.Context(), m, res)
 	writeJSON(w, 200, res)
 	return nil
+}
+
+// vote combines a control-plane result with each location's latest one (no older than two intervals): the monitor
+// fails only when more than half of the locations fail, so a network problem near one of them isn't an outage.
+func (s *Server) vote(ctx context.Context, monitorID string, cp protocol.MonitorResult) protocol.MonitorResult {
+	var total, failed int
+	var lastErr string
+	err := s.db.QueryRow(ctx, `select count(*), count(*) filter (where not x.ok), coalesce((array_agg(x.error) filter (where not x.ok))[1], '')
+		from monitors m, lateral (select distinct on (c.location) c.ok, c.error from monitor_checks c
+		  where c.monitor_id = m.id and c.location = any(m.locations) and c.ts > now() - make_interval(secs => 2 * m.interval_seconds + 30)
+		  order by c.location, c.ts desc) x where m.id::text = $1`, monitorID).Scan(&total, &failed, &lastErr)
+	if err != nil || total == 0 {
+		return cp
+	}
+	if !cp.OK {
+		failed++
+		lastErr = cp.Error
+	}
+	total++
+	r := cp
+	if r.OK = failed*2 <= total; r.OK {
+		r.Error = ""
+	} else {
+		r.Error = trunc(fmt.Sprintf("%s (failing from %d of %d locations)", lastErr, failed, total), 300)
+	}
+	return r
+}
+
+// storeLocationResults keeps results an agent reports for monitors that list its server as a location.
+func (s *Server) storeLocationResults(ctx context.Context, ac *agentConn, b protocol.MonitorResults) error {
+	for _, r := range b.Results {
+		if _, err := s.db.Exec(ctx, `insert into monitor_checks (monitor_id, ts, ok, latency_ms, status_code, error, location)
+			select m.id, least($3::timestamptz, now()), $4, $5, nullif($6, 0), $7, $2::uuid from monitors m
+			where m.id::text = $1 and m.project_id::text = $8 and $2::uuid = any(m.locations)`,
+			r.MonitorID, ac.serverID, r.TS, r.OK, r.LatencyMS, r.StatusCode, trunc(r.Error, 300), ac.projectID); err != nil {
+			return err
+		}
+	}
+	if len(b.Results) > 0 {
+		s.hub.publish(ac.projectID, "monitors", "")
+	}
+	return nil
+}
+
+func (s *Server) monitorLocations(ctx context.Context, monitorID string) []string {
+	var ids []string
+	if monitorID != "" {
+		s.db.QueryRow(ctx, `select locations::text[] from monitors where id::text = $1`, monitorID).Scan(&ids)
+	}
+	return ids
+}
+
+// pushMonitorLocations sends fresh config to servers whose list of monitors to check may have changed.
+func (s *Server) pushMonitorLocations(ctx context.Context, serverIDs []string) {
+	seen := map[string]bool{}
+	for _, id := range serverIDs {
+		if !seen[id] && s.hub.connected(id) {
+			s.pushConfig(ctx, id)
+		}
+		seen[id] = true
+	}
 }

@@ -14,7 +14,9 @@ type DBConfig struct {
 }
 
 type AgentConfig struct {
-	Databases []DBConfig `json:"databases"`
+	Databases []DBConfig      `json:"databases"`
+	LogUnits  []string        `json:"log_units,omitempty"` // systemd services whose journal is shipped with the container logs
+	Monitors  []MonitorConfig `json:"monitors,omitempty"`  // uptime checks this server runs as an extra location
 }
 
 type SlowQuery struct {

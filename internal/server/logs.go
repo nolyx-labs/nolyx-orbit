@@ -1,4 +1,4 @@
-// Central container logs: ingest, level detection and search.
+// Central logs from containers and chosen systemd services: ingest, level detection and search.
 package server
 
 import (
@@ -56,11 +56,15 @@ func (s *Server) storeLogs(ctx context.Context, ac *agentConn, b protocol.LogBat
 	}
 	rows := make([][]any, 0, len(b.Lines))
 	for _, l := range b.Lines {
+		level := l.Level
+		if !oneOf(level, []string{"error", "warn", "info", "debug"}) {
+			level = logLevel(l.Line)
+		}
 		rows = append(rows, []any{ac.projectID, ac.serverID, trunc(l.ContainerID, 64), trunc(l.Container, 255), trunc(l.App, 64), l.TS,
-			l.Stream, logLevel(l.Line), strings.ToValidUTF8(strings.ReplaceAll(l.Line, "\x00", ""), "�")})
+			l.Stream, level, strings.ToValidUTF8(strings.ReplaceAll(l.Line, "\x00", ""), "�"), trunc(l.Unit, 255)})
 	}
 	_, err := s.db.CopyFrom(ctx, pgx.Identifier{"log_lines"},
-		[]string{"project_id", "server_id", "container_id", "container", "app", "ts", "stream", "level", "line"}, pgx.CopyFromRows(rows))
+		[]string{"project_id", "server_id", "container_id", "container", "app", "ts", "stream", "level", "line", "unit"}, pgx.CopyFromRows(rows))
 	if err == nil {
 		s.hub.publish(ac.projectID, "logs", "")
 	}
@@ -82,15 +86,15 @@ func (s *Server) searchLogs(w http.ResponseWriter, r *http.Request) error {
 		levels = strings.Split(l, ",")
 	}
 	out, err := s.list(r.Context(), `
-		select l.id, l.ts, l.level, l.stream, l.line, l.container, l.container_id, l.app, l.server_id, s.name as server_name
+		select l.id, l.ts, l.level, l.stream, l.line, l.container, l.container_id, l.app, l.unit, l.server_id, s.name as server_name
 		from log_lines l join servers s on s.id = l.server_id
 		where l.project_id = $1 and l.ts > now() - $2::interval
 		  and ($3 = '' or l.line ilike '%' || $3 || '%')
 		  and (coalesce(cardinality($4::text[]), 0) = 0 or l.level = any($4))
 		  and ($5 = '' or l.server_id::text = $5) and ($6 = '' or l.app = $6) and ($7 = '' or l.container = $7)
-		  and ($8 = 0 or l.id < $8)
+		  and ($8 = 0 or l.id < $8) and ($9 = '' or l.unit = $9)
 		order by l.ts desc, l.id desc limit 300`,
-		p.ID, rng.String(), escapeLike(q.Get("q")), levels, q.Get("server"), q.Get("app"), q.Get("container"), atoi(q.Get("before")))
+		p.ID, rng.String(), escapeLike(q.Get("q")), levels, q.Get("server"), q.Get("app"), q.Get("container"), atoi(q.Get("before")), q.Get("unit"))
 	if err != nil {
 		return err
 	}

@@ -207,6 +207,13 @@ func (s *Server) handleFrame(ctx context.Context, ac *agentConn, env protocol.En
 		}
 		return s.storeLogs(ctx, ac, b)
 
+	case protocol.TypeMonitorResults:
+		var b protocol.MonitorResults
+		if err := json.Unmarshal(env.Payload, &b); err != nil {
+			return err
+		}
+		return s.storeLocationResults(ctx, ac, b)
+
 	case protocol.TypeAppMetrics:
 		var b protocol.AppMetricsBatch
 		if err := json.Unmarshal(env.Payload, &b); err != nil {

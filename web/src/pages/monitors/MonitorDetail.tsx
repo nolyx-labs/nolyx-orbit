@@ -18,6 +18,14 @@ interface Detail extends Monitor {
   uptime_90d: number | null
   outages: { id: number; started_at: string; ended_at: string | null; error: string }[]
   series: { t: number[]; latency: (number | null)[]; failed: number[] }
+  location_results: {
+    server_id: string
+    name: string
+    ok: boolean | null
+    latency_ms: number | null
+    error: string | null
+    ts: string | null
+  }[]
 }
 
 export function MonitorDetail() {
@@ -119,7 +127,7 @@ export function MonitorDetail() {
           <div className="panel-body">
             {m.series.t.length ? (
               <Chart
-                title={`Average response time · checked ${ago(m.last_checked_at)}`}
+                title={`Average response time from the control plane · checked ${ago(m.last_checked_at)}`}
                 t={m.series.t}
                 series={[{ label: 'Response', values: m.series.latency, color: 'series-1' }]}
                 format={(v) => `${Math.round(v)} ms`}
@@ -130,6 +138,40 @@ export function MonitorDetail() {
             )}
           </div>
         </Panel>
+        {!!m.location_results.length && (
+          <Panel title="Locations">
+            <table className="t">
+              <thead>
+                <tr>
+                  <th>Checked from</th>
+                  <th>Latest result</th>
+                  <th className="right">Response</th>
+                  <th>When</th>
+                </tr>
+              </thead>
+              <tbody>
+                {m.location_results.map((l) => (
+                  <tr key={l.server_id}>
+                    <td>
+                      <Link to={`/p/${project.id}/servers/${l.server_id}/overview`}>{l.name}</Link>
+                    </td>
+                    <td>
+                      {l.ok == null ? (
+                        <StatusText tone="">No results yet</StatusText>
+                      ) : l.ok ? (
+                        <StatusText tone="ok">Up</StatusText>
+                      ) : (
+                        <StatusText tone="err">{l.error || 'Down'}</StatusText>
+                      )}
+                    </td>
+                    <td className="right mono">{l.latency_ms != null ? `${l.latency_ms} ms` : '—'}</td>
+                    <td className="muted">{l.ts ? ago(l.ts) : '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </Panel>
+        )}
         <Panel title="Outages">
           {!m.outages.length ? (
             <Empty title="No outages recorded" />

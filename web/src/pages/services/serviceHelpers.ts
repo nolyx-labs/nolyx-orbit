@@ -27,6 +27,11 @@ export interface App {
   auto_deploy: boolean
   webhook_url: string | null
   webhook_secret?: string | null
+  carried: {
+    mounts?: { type: string; source?: string; target: string; read_only?: boolean }[]
+    networks?: { name: string }[]
+  }
+  importing: boolean
   container: { id: string; state: string; status: string; health: string; cpu: number; mem_used: number } | null
   last_deployment: { id: string; number: number; status: string; created_at: string; commit_sha: string } | null
 }

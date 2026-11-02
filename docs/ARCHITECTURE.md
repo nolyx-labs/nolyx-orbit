@@ -86,11 +86,12 @@ The wire types are in [`internal/protocol`](../internal/protocol/protocol.go).
 | agent → cp | `hello` | Host facts, plus Docker and Nomad versions and region |
 | agent → cp | `metrics` | Every 10s, including disk I/O. Doubles as the heartbeat. 1h is buffered while offline. |
 | agent → cp | `containers` | Every 15s, with per-container CPU and memory |
-| agent → cp | `logs` | Every 3s, using Docker's `since` cursor. Cursors only advance after delivery. |
+| agent → cp | `logs` | Every 3s, using Docker's `since` cursor, plus the journal of the systemd services chosen per server (`journalctl --after-cursor`). Cursors only advance after delivery. |
 | agent → cp | `db_stats` | Every 15s per monitored database: connections, TPS/QPS, cache hit, locks, slow queries, tables, replication |
 | agent → cp | `app_metrics` | Every 10s: request counts, 5xx and latency from the zero-downtime proxy |
 | agent → cp | `nomad` | Every 30s when a Nomad agent is reachable: nodes, jobs, allocations, deployments |
-| cp → agent | `config` | Databases to monitor, with credentials. Sent on connect and whenever they change. |
+| cp → agent | `config` | Databases to monitor (with credentials), systemd services whose logs to collect, and monitors to check as a location. Sent on connect and whenever they change. |
+| agent → cp | `monitor_results` | Results of the checks a server runs as a monitor location |
 | cp → agent | `command` | `{id, action, args, expires_at, signature}` |
 | agent → cp | `progress` / `result` | Step updates and the final outcome for deployments and operations |
 
@@ -109,7 +110,7 @@ The wire types are in [`internal/protocol`](../internal/protocol/protocol.go).
 
 **Actions:**
 
-- `container.{start,stop,restart,remove,logs}`
+- `container.{start,stop,restart,remove,logs,exec,inspect}`
 - `deploy`
 - `db.{provision,replica.create,resync,remove,promote,backup,restore}`
 - `nomad.{register,stop,install}`
@@ -154,6 +155,9 @@ There is no shell or terminal action.
   - Two failed checks in a row mark a monitor down and open an outage; uptime is computed from outages.
   - Checks use the same private-address guard as webhooks (`ALLOW_PRIVATE_WEBHOOKS`).
   - The `monitor_down` alert metric notifies through the usual channels.
+  - Servers can be added as extra locations. Their agents run the same checks (`internal/uptime`) and always refuse private addresses. With locations, a check fails only when more than half of the control plane and the locations' latest results (no older than two intervals) fail.
+- **Importing containers:** an admin can turn a container Orbit didn't create into a service. The agent reports its settings (`container.inspect`) and lists anything Orbit can't recreate (privileged, host network, devices, an overridden entrypoint, ...), which blocks the import. Bind mounts, existing volumes, extra networks, single-address ports and labels are stored in `applications.carried`, which the service API never edits. The first deploy stops the original, and on success keeps it stopped as `<name>-before-orbit` with no restart policy. Because carried bind mounts reach the host's files, changing such a service or deploying a new image to it takes admin.
+- **Log forwarding:** a project can copy its logs into an `orbit_logs` table in a PostgreSQL database it owns. A worker loop copies new lines every 30 seconds, through the private-address guard.
 - **Status pages** are server-rendered Go templates (no JavaScript needed), laid out like Atlassian Statuspage.
   - Each component takes its status from a monitor, server or service, or is set by hand. Open incidents can raise it; in-progress maintenance shows "under maintenance". The worker records status changes every 30 seconds, and the 90-day bars are built from that history.
   - Maintenance starts and completes on schedule, and holds alerts for the servers and monitors it covers.
@@ -177,7 +181,7 @@ There is no shell or terminal action.
 - **Nomad installs:** they run the official image with `--cgroupns=host`. HashiCorp doesn't officially support running Nomad clients in Docker, and this setup supports the Docker task driver only.
 - **Database engines:** PostgreSQL only. The protocol and schema leave room for MySQL and MariaDB.
 - **Promotion:** it doesn't fence the old primary. The UI warns about split brain and shows both primaries.
-- **Host logs:** journald isn't collected. Container logs are, including those from managed databases.
+- **Host logs:** journald is collected only for the systemd services chosen on each server, and only when the agent runs on the host (not in a container).
 
 ## 6. Configuration
 

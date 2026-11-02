@@ -10,6 +10,8 @@ type LogLine struct {
 	TS          time.Time `json:"ts"`
 	Stream      string    `json:"stream"`
 	Line        string    `json:"line"`
+	Unit        string    `json:"unit,omitempty"`  // systemd service, for journal lines (no container)
+	Level       string    `json:"level,omitempty"` // from the journal's priority; container lines are guessed by the control plane
 }
 
 type LogBatch struct {

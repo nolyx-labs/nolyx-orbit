@@ -56,6 +56,9 @@ type Agent struct {
 	backlog []protocol.Metrics // samples kept while disconnected
 	seen    *seenSet
 	actions *actionLog
+
+	logUnits []string                 // journal.go
+	monitors []protocol.MonitorConfig // monitors.go
 }
 
 const maxBacklog = 360 // 1h at 10s
@@ -75,6 +78,8 @@ func (a *Agent) Run(ctx context.Context) error {
 	a.proxy.restore(ctx, a.docker)
 	go a.collect(ctx)
 	go a.shipLogs(ctx)
+	go a.shipJournal(ctx)
+	go a.runMonitors(ctx)
 	go a.reportDatabases(ctx)
 	go a.reportAppMetrics(ctx)
 	go a.reportNomad(ctx)
@@ -195,6 +200,8 @@ func (a *Agent) session(ctx context.Context) error {
 			var cfg protocol.AgentConfig
 			if json.Unmarshal(env.Payload, &cfg) == nil {
 				a.dbs.configure(cfg.Databases)
+				a.setLogUnits(cfg.LogUnits)
+				a.setMonitors(cfg.Monitors)
 			}
 		case protocol.TypeCommand:
 			var cmd protocol.Command
