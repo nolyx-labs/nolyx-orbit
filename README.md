@@ -1,6 +1,25 @@
-# Nolyx Orbit
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="web/public/brand/logo-horizontal-on-dark.svg">
+    <source media="(prefers-color-scheme: light)" srcset="web/public/brand/logo-horizontal-on-light.svg">
+    <img src="web/public/brand/logo-horizontal-on-light.svg" alt="Nolyx Labs" width="360">
+  </picture>
+</p>
 
-**Self-hosted infrastructure management, without the complexity of Kubernetes.**
+<h1 align="center">Nolyx Orbit</h1>
+
+<p align="center">
+  <strong>Self-hosted infrastructure management, without the complexity of Kubernetes.</strong>
+</p>
+
+<p align="center">
+  <a href="#quick-start">Quick start</a> ·
+  <a href="#features">Features</a> ·
+  <a href="docs/SECURITY.md">Security</a> ·
+  <a href="docs/ARCHITECTURE.md">Architecture</a>
+</p>
+
+---
 
 Orbit is a control plane you run on your own server. You install a small agent on each machine you want to manage. The agent connects out to Orbit, so those machines need no open inbound ports.
 
