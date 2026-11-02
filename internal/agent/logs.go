@@ -101,6 +101,7 @@ func (d *Docker) logLines(ctx context.Context, id string, q url.Values) ([]proto
 		return nil, "", err
 	}
 	var out []protocol.LogLine
+	var red redactor
 	cursor := ""
 	for _, f := range frames(raw) {
 		for _, line := range strings.Split(strings.TrimRight(string(f.data), "\n"), "\n") {
@@ -112,6 +113,7 @@ func (d *Docker) logLines(ctx context.Context, id string, q url.Values) ([]proto
 			if len(out) >= maxLinesPerPoll {
 				return out, cursor, nil
 			}
+			text = red.line(text) // before truncating, so a secret cut in half is still recognized
 			if len(text) > maxLineBytes {
 				text = text[:maxLineBytes] + "…"
 			}

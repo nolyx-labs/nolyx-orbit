@@ -50,7 +50,10 @@ export function Logs() {
   }
   return (
     <div className="page">
-      <PageHead title="Logs" sub="Container logs from every server, shipped by the agent and kept for 7 days">
+      <PageHead
+        title="Logs"
+        sub="Container logs from every server, shipped by the agent and kept for 7 days. Passwords, tokens and keys are masked on each server before they're sent."
+      >
         <label className="row muted" style={{ fontSize: 12 }}>
           <input type="checkbox" checked={live} onChange={(e) => setLive(e.target.checked)} /> Live
         </label>

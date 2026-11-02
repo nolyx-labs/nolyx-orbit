@@ -246,6 +246,22 @@ All settings live in `.env`. After changing them, run `docker compose up -d` (ad
 | `ALLOW_SIGNUP` | `false` | Open registration to anyone. The first account and invited people can always sign up. |
 | `ALLOW_PRIVATE_WEBHOOKS` | `false` | Let alert webhooks reach private IP addresses (e.g. an on-prem chat server). Off by default so members can't use webhooks to reach internal services. |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_FROM` | — | Email for alerts, invitations and password resets. |
+| `OIDC_ISSUER`, `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET` | — | Single sign-on with an OpenID Connect provider. See [Single sign-on](#single-sign-on). |
+| `OIDC_NAME` | `SSO` | Label for the "Sign in with …" button, e.g. `Okta`. |
+
+### Single sign-on
+
+Orbit can sign people in with any OpenID Connect provider: Google, Microsoft Entra ID, Okta, Keycloak, Authentik, Auth0.
+
+1. Create a web application (confidential client) at your provider with the redirect URI `APP_URL/api/v1/auth/oidc/callback`, e.g. `https://orbit.example.com/api/v1/auth/oidc/callback`, and the scopes `openid email profile`.
+2. Set `OIDC_ISSUER` (the URL that serves `/.well-known/openid-configuration`, e.g. `https://accounts.google.com`, `https://login.microsoftonline.com/<tenant-id>/v2.0`, `https://<org>.okta.com`, `https://keycloak.example.com/realms/<realm>`), `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET` and `OIDC_NAME`, then run `docker compose up -d`.
+
+How it works:
+- Only verified email addresses are accepted (`email_verified`). Microsoft Entra ID doesn't send that claim: add the optional claims `email` and `xms_edov` to the ID token in the app registration's **Token configuration**, which marks addresses on domains your tenant has verified. Multi-tenant (`/common`) issuers aren't supported.
+- The first sign-in links to the Orbit account with the same email. From then on the account only accepts that provider identity, so an email address reassigned at the provider can't take it over. To re-link (e.g. after changing provider), clear `oidc_subject` and `oidc_issuer` for that user in the database.
+- Someone without an account gets one only if sign-up is open (`ALLOW_SIGNUP`) or they have a pending invitation, as with passwords.
+- People with two-factor authentication still enter their code after signing in with SSO.
+- An owner can turn on **Require single sign-on** in **Settings → Organization**. Members of that organization then can't sign in with a password. Owners still can, so nobody is locked out if the provider is down; if SSO is later unconfigured, the requirement stops applying.
 
 **Agent settings** go in `/etc/orbit-agent/env` on each server:
 
@@ -256,6 +272,8 @@ All settings live in `.env`. After changing them, run `docker compose up -d` (ad
 | `ORBIT_INSECURE` | Set to `1` to allow plain HTTP. |
 | `ORBIT_REGION` | Region label for the server. |
 | `NOMAD_ADDR`, `NOMAD_TOKEN` | Location of the Nomad API, if it isn't `http://127.0.0.1:4646`. |
+
+The agent masks likely secrets in container logs before sending them: values of `password`/`secret`/`token`/`api_key`-style keys, `Authorization` headers and bearer tokens, passwords in URLs, private keys, JWTs, AWS access key IDs, and GitHub, Slack, Stripe and Orbit tokens.
 
 ---
 

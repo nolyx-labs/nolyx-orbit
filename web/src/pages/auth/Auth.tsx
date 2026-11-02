@@ -2,7 +2,7 @@ import { FormEvent, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router'
 import { BrandMark } from '../../components/ui/BrandMark'
 import { ErrorNote } from '../../components/ui/states'
-import { api } from '../../lib/api'
+import { api, useApi } from '../../lib/api'
 import { inviteToken, safeNext } from '../../lib/paths'
 
 export function Auth({ mode }: { mode: 'login' | 'signup' }) {
@@ -10,8 +10,11 @@ export function Auth({ mode }: { mode: 'login' | 'signup' }) {
   const [params] = useSearchParams()
   const next = safeNext(params.get('next'))
   const [form, setForm] = useState({ name: '', email: '', password: '', code: '' })
-  const [mfa, setMfa] = useState(false)
-  const [error, setError] = useState<string>()
+  // After single sign-on, people with 2FA land here (?sso=mfa) to enter their code.
+  const ssoMfa = params.get('sso') === 'mfa'
+  const [sso] = useApi<{ enabled: boolean; name: string }>('/auth/oidc')
+  const [mfa, setMfa] = useState(ssoMfa)
+  const [error, setError] = useState(params.get('sso_error') ?? undefined)
   const [busy, setBusy] = useState(false)
   const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement>) =>
     setForm({ ...form, [k]: e.target.value })
@@ -21,13 +24,15 @@ export function Auth({ mode }: { mode: 'login' | 'signup' }) {
     setBusy(true)
     setError(undefined)
     try {
-      await api(
-        'POST',
-        `/auth/${mode}`,
-        mode === 'login'
-          ? { email: form.email, password: form.password, code: form.code }
-          : { name: form.name, email: form.email, password: form.password, invite: inviteToken(next) ?? '' },
-      )
+      if (ssoMfa) await api('POST', '/auth/oidc/mfa', { code: form.code })
+      else
+        await api(
+          'POST',
+          `/auth/${mode}`,
+          mode === 'login'
+            ? { email: form.email, password: form.password, code: form.code }
+            : { name: form.name, email: form.email, password: form.password, invite: inviteToken(next) ?? '' },
+        )
       nav(next)
     } catch (err: any) {
       if (err.data?.mfa_required) {
@@ -100,6 +105,15 @@ export function Auth({ mode }: { mode: 'login' | 'signup' }) {
         <button className="btn primary" style={{ height: 32, justifyContent: 'center' }} disabled={busy}>
           {busy ? 'Please wait…' : mode === 'login' ? (mfa ? 'Verify' : 'Sign in') : 'Create account'}
         </button>
+        {sso?.enabled && !mfa && (
+          <a
+            className="btn"
+            style={{ height: 32, justifyContent: 'center' }}
+            href={`/api/v1/auth/oidc/start?next=${encodeURIComponent(next)}`}
+          >
+            Sign in with {sso.name}
+          </a>
+        )}
         <div className="muted" style={{ textAlign: 'center' }}>
           {mode === 'login' ? (
             <>

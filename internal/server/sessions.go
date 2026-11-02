@@ -2,6 +2,7 @@
 package server
 
 import (
+	"context"
 	"net/http"
 	"net/mail"
 	"strings"
@@ -32,14 +33,8 @@ func (s *Server) signup(w http.ResponseWriter, r *http.Request) error {
 	}
 	s.attempts.fail(key)
 	c.Email = strings.ToLower(strings.TrimSpace(c.Email))
-	if !s.cfg.AllowSignup {
-		// The first user can always sign up so a fresh self-hosted install is usable.
-		var ok bool
-		s.db.QueryRow(r.Context(), `select not exists(select 1 from users) or exists(select 1 from invites
-			where token_hash = $1 and email = $2 and accepted_at is null and expires_at > now())`, hashToken(c.Invite), c.Email).Scan(&ok)
-		if !ok {
-			return errStatus(403, "sign up is disabled on this instance; ask an admin for an invitation")
-		}
+	if !s.signupAllowed(r.Context(), c.Email, hashToken(c.Invite)) {
+		return errStatus(403, "sign up is disabled on this instance; ask an admin for an invitation")
 	}
 	if _, err := mail.ParseAddress(c.Email); err != nil {
 		return errStatus(400, "invalid email")
@@ -55,28 +50,46 @@ func (s *Server) signup(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
-	var userID, orgID string
-	err = pgx.BeginFunc(r.Context(), s.db, func(tx pgx.Tx) error {
-		if err := tx.QueryRow(r.Context(), `insert into users (email, name, password_hash) values ($1,$2,$3) on conflict do nothing returning id::text`,
-			c.Email, c.Name, string(hash)).Scan(&userID); err == pgx.ErrNoRows {
-			return errStatus(409, "an account with that email already exists")
-		} else if err != nil {
-			return err
-		}
-		if err := tx.QueryRow(r.Context(), `insert into organizations (name) values ($1) returning id::text`, c.Name+"'s Infrastructure").Scan(&orgID); err != nil {
-			return err
-		}
-		if _, err := tx.Exec(r.Context(), `insert into memberships values ($1,$2,'owner')`, orgID, userID); err != nil {
-			return err
-		}
-		_, err := tx.Exec(r.Context(), `insert into projects (org_id, name) values ($1,'Production')`, orgID)
-		return err
-	})
+	userID, orgID, err := s.createAccount(r.Context(), c.Email, c.Name, string(hash))
 	if err != nil {
 		return err
 	}
 	s.audit(r, orgID, "", userID, c.Email, "user.signup", c.Email, nil)
 	return s.startSession(w, r, userID)
+}
+
+// signupAllowed: the first user can always sign up so a fresh self-hosted install is usable; after that sign-up
+// must be open or the email invited. Password sign-up must hold the invite token (inviteHash); SSO passes nil
+// because the provider has verified the email.
+func (s *Server) signupAllowed(ctx context.Context, email string, inviteHash []byte) bool {
+	if s.cfg.AllowSignup {
+		return true
+	}
+	var ok bool
+	s.db.QueryRow(ctx, `select not exists(select 1 from users) or exists(select 1 from invites
+		where ($1::bytea is null or token_hash = $1) and email = $2 and accepted_at is null and expires_at > now())`, inviteHash, email).Scan(&ok)
+	return ok
+}
+
+// createAccount creates a user with their own organization and a first project.
+func (s *Server) createAccount(ctx context.Context, email, name, passwordHash string) (userID, orgID string, err error) {
+	err = pgx.BeginFunc(ctx, s.db, func(tx pgx.Tx) error {
+		if err := tx.QueryRow(ctx, `insert into users (email, name, password_hash) values ($1,$2,$3) on conflict do nothing returning id::text`,
+			email, name, passwordHash).Scan(&userID); err == pgx.ErrNoRows {
+			return errStatus(409, "an account with that email already exists")
+		} else if err != nil {
+			return err
+		}
+		if err := tx.QueryRow(ctx, `insert into organizations (name) values ($1) returning id::text`, name+"'s Infrastructure").Scan(&orgID); err != nil {
+			return err
+		}
+		if _, err := tx.Exec(ctx, `insert into memberships values ($1,$2,'owner')`, orgID, userID); err != nil {
+			return err
+		}
+		_, err := tx.Exec(ctx, `insert into projects (org_id, name) values ($1,'Production')`, orgID)
+		return err
+	})
+	return userID, orgID, err
 }
 
 func (s *Server) login(w http.ResponseWriter, r *http.Request) error {
@@ -105,6 +118,11 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) error {
 		s.attempts.fail(ipKey, emailKey)
 		return errStatus(401, "invalid email or password")
 	}
+	if org, err := s.passwordBlockedBySSO(r.Context(), id); err != nil {
+		return err
+	} else if org != "" {
+		return errStatus(403, "%s requires single sign-on: use Sign in with %s", org, s.cfg.OIDCName)
+	}
 	if mfa {
 		if c.Code == "" {
 			writeJSON(w, 401, map[string]any{"error": "enter the code from your authenticator app", "mfa_required": true})
@@ -123,6 +141,15 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) error {
 }
 
 func (s *Server) startSession(w http.ResponseWriter, r *http.Request, userID string) error {
+	if err := s.newSession(w, r, userID); err != nil {
+		return err
+	}
+	writeJSON(w, 200, map[string]bool{"ok": true})
+	return nil
+}
+
+// newSession sets the session cookie; SSO redirects afterwards instead of answering JSON.
+func (s *Server) newSession(w http.ResponseWriter, r *http.Request, userID string) error {
 	token, hash := newToken("")
 	exp := time.Now().Add(14 * 24 * time.Hour)
 	if _, err := s.db.Exec(r.Context(), `insert into sessions (token_hash, user_id, expires_at) values ($1,$2,$3)`, hash, userID, exp); err != nil {
@@ -132,7 +159,6 @@ func (s *Server) startSession(w http.ResponseWriter, r *http.Request, userID str
 		Name: sessionCookie, Value: token, Path: "/", Expires: exp, HttpOnly: true,
 		Secure: strings.HasPrefix(s.cfg.AppURL, "https://"), SameSite: http.SameSiteLaxMode,
 	})
-	writeJSON(w, 200, map[string]bool{"ok": true})
 	return nil
 }
 

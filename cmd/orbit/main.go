@@ -32,6 +32,10 @@ func main() {
 		SMTPUser:             os.Getenv("SMTP_USERNAME"),
 		SMTPPass:             os.Getenv("SMTP_PASSWORD"),
 		SMTPFrom:             os.Getenv("SMTP_FROM"),
+		OIDCIssuer:           os.Getenv("OIDC_ISSUER"),
+		OIDCClientID:         os.Getenv("OIDC_CLIENT_ID"),
+		OIDCClientSecret:     os.Getenv("OIDC_CLIENT_SECRET"),
+		OIDCName:             env("OIDC_NAME", "SSO"),
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()

@@ -7,7 +7,8 @@ import { Panel } from '../../components/ui/Panel'
 import { Copy } from '../../components/ui/controls'
 import { ErrorNote } from '../../components/ui/states'
 import { Badge } from '../../components/ui/status'
-import { api } from '../../lib/api'
+import { api, useApi } from '../../lib/api'
+import { ago } from '../../lib/format'
 
 export function Account() {
   const { me, reloadMe } = useProject()
@@ -15,6 +16,9 @@ export function Account() {
   const [pwMsg, setPwMsg] = useState<string>()
   const [pwError, setPwError] = useState<string>()
   const [dialog, setDialog] = useState<'setup' | 'disable' | 'codes' | null>(null)
+  const [sso] = useApi<{ enabled: boolean; name: string; subject: string | null; linked_at: string | null }>(
+    '/account/sso',
+  )
   const close = () => {
     setDialog(null)
     reloadMe()
@@ -99,6 +103,22 @@ export function Account() {
             your password. Orbit can run commands on every connected server, so this is strongly recommended.
           </div>
         </Panel>
+        {sso?.enabled && (
+          <Panel
+            title={<>Single sign-on {sso.subject ? <Badge tone="ok">Linked</Badge> : <Badge>Not linked</Badge>}</>}
+          >
+            <div className="panel-body muted">
+              {sso.subject ? (
+                <>
+                  Linked to your {sso.name} identity <span className="mono">{sso.subject}</span> {ago(sso.linked_at)}.
+                  Only that identity can sign in to this account with {sso.name}.
+                </>
+              ) : (
+                <>Use Sign in with {sso.name} on the sign-in page to link your account.</>
+              )}
+            </div>
+          </Panel>
+        )}
       </div>
       {dialog === 'setup' && <SetupDialog onClose={close} />}
       {dialog === 'disable' && <DisableDialog onClose={close} />}

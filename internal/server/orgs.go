@@ -34,7 +34,7 @@ func (s *Server) getOrg(w http.ResponseWriter, r *http.Request) error {
 			return err
 		}
 	}
-	if out["org"], err = s.one(ctx, `select id, name, created_at, require_mfa from organizations where id::text = $1`, oid); err != nil {
+	if out["org"], err = s.one(ctx, `select id, name, created_at, require_mfa, require_sso from organizations where id::text = $1`, oid); err != nil {
 		return err
 	}
 	out["role"] = mustJSON(role)
@@ -43,16 +43,23 @@ func (s *Server) getOrg(w http.ResponseWriter, r *http.Request) error {
 }
 
 func (s *Server) updateOrg(w http.ResponseWriter, r *http.Request) error {
-	oid, _, err := s.orgAccess(r, "admin")
+	oid, role, err := s.orgAccess(r, "admin")
 	if err != nil {
 		return err
 	}
 	var in struct {
 		Name       *string `json:"name"`
 		RequireMFA *bool   `json:"require_mfa"`
+		RequireSSO *bool   `json:"require_sso"`
 	}
 	if err := decode(r, &in); err != nil {
 		return err
+	}
+	if in.RequireSSO != nil && role != "owner" {
+		return errStatus(403, "only owners can change the single sign-on requirement")
+	}
+	if in.RequireSSO != nil && *in.RequireSSO && s.oidc == nil {
+		return errStatus(400, "single sign-on isn't set up on this instance (OIDC_ISSUER)")
 	}
 	u := currentUser(r)
 	if in.Name != nil {
@@ -72,6 +79,12 @@ func (s *Server) updateOrg(w http.ResponseWriter, r *http.Request) error {
 			return err
 		}
 		s.audit(r, oid, "", u.ID, u.label(), "org.require_mfa", fmt.Sprint(*in.RequireMFA), nil)
+	}
+	if in.RequireSSO != nil {
+		if _, err := s.db.Exec(r.Context(), `update organizations set require_sso = $2 where id::text = $1`, oid, *in.RequireSSO); err != nil {
+			return err
+		}
+		s.audit(r, oid, "", u.ID, u.label(), "org.require_sso", fmt.Sprint(*in.RequireSSO), nil)
 	}
 	w.WriteHeader(204)
 	return nil

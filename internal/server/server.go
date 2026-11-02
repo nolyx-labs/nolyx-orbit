@@ -15,6 +15,7 @@ import (
 	"io"
 	"io/fs"
 	"log/slog"
+	"net/http"
 	"sort"
 
 	"github.com/jackc/pgx/v5"
@@ -32,6 +33,8 @@ type Config struct {
 	Web                  fs.FS  // built SPA
 
 	SMTPHost, SMTPPort, SMTPUser, SMTPPass, SMTPFrom string
+
+	OIDCIssuer, OIDCClientID, OIDCClientSecret, OIDCName string // single sign-on, see oidc.go
 }
 
 type Server struct {
@@ -42,7 +45,9 @@ type Server struct {
 	hub    *Hub
 	log    *slog.Logger
 
-	attempts attempts // failed sign-ins etc., see limit.go
+	attempts   attempts      // failed sign-ins etc., see limit.go
+	oidc       *oidcProvider // nil unless single sign-on is configured
+	apiHandler http.Handler  // the authenticated /api/v1 routes, also used by the MCP server
 }
 
 //go:embed migrations/*.sql
@@ -57,6 +62,10 @@ func New(ctx context.Context, cfg Config, log *slog.Logger) (*Server, error) {
 	aead, _ := cipher.NewGCM(block)
 	seed := make([]byte, ed25519.SeedSize)
 	io.ReadFull(hkdf.New(sha256.New, key, nil, []byte("orbit command signing v1")), seed)
+	oidc, err := newOIDC(cfg)
+	if err != nil {
+		return nil, err
+	}
 	db, err := pgxpool.New(ctx, cfg.DatabaseURL)
 	if err != nil {
 		return nil, err
@@ -64,7 +73,7 @@ func New(ctx context.Context, cfg Config, log *slog.Logger) (*Server, error) {
 	if err := db.Ping(ctx); err != nil {
 		return nil, fmt.Errorf("database: %w", err)
 	}
-	s := &Server{cfg: cfg, db: db, aead: aead, signer: ed25519.NewKeyFromSeed(seed), hub: newHub(), log: log}
+	s := &Server{cfg: cfg, db: db, aead: aead, signer: ed25519.NewKeyFromSeed(seed), hub: newHub(), log: log, oidc: oidc}
 	if err := s.migrate(ctx); err != nil {
 		return nil, fmt.Errorf("migrate: %w", err)
 	}

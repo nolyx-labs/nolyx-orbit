@@ -8,6 +8,7 @@ import { Empty, ErrorNote, Loading } from '../../components/ui/states'
 import { Badge } from '../../components/ui/status'
 import { api, useApi } from '../../lib/api'
 import { ago } from '../../lib/format'
+import { useOrg } from './useOrg'
 
 export function OrganizationSettings() {
   const { org, reloadMe } = useProject()
@@ -21,6 +22,8 @@ export function OrganizationSettings() {
   const [adding, setAdding] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [error, setError] = useState<string>()
+  const [sso] = useApi<{ enabled: boolean; name: string }>('/auth/oidc')
+  const [orgData, , reloadOrg] = useOrg()
   return (
     <div className="page">
       <PageHead title="Organization" />
@@ -81,6 +84,31 @@ export function OrganizationSettings() {
               <span className="faint">{org.require_mfa ? 'Required' : 'Not required'}</span>
             )}
           </div>
+          {sso?.enabled && orgData && (
+            <div className="panel-body row">
+              <div style={{ flex: 1 }}>
+                <div style={{ fontWeight: 500 }}>Require single sign-on</div>
+                <div className="muted">
+                  Members must sign in with {sso.name} instead of a password. Owners can still use their password, so
+                  you aren't locked out if {sso.name} is unavailable.
+                </div>
+              </div>
+              {isOwner ? (
+                <button
+                  className={orgData.org.require_sso ? 'btn' : 'btn primary'}
+                  onClick={() =>
+                    api('PATCH', `/orgs/${org.id}`, { require_sso: !orgData.org.require_sso }).then(reloadOrg, (e) =>
+                      setError(e.message),
+                    )
+                  }
+                >
+                  {orgData.org.require_sso ? 'Stop requiring' : 'Require'}
+                </button>
+              ) : (
+                <span className="faint">{orgData.org.require_sso ? 'Required' : 'Not required'}</span>
+              )}
+            </div>
+          )}
         </Panel>
         {canAdmin && (
           <Panel

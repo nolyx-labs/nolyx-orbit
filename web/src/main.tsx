@@ -31,6 +31,7 @@ import { Servers } from './pages/servers/Servers'
 import { NewService } from './pages/services/NewService'
 import { ServiceDetail } from './pages/services/ServiceDetail'
 import { Services } from './pages/services/Services'
+import { AIApps } from './pages/settings/AIApps'
 import { Account } from './pages/settings/Account'
 import { Agents } from './pages/settings/Agents'
 import { StatusPageDetail } from './pages/status/StatusPageDetail'
@@ -90,6 +91,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
           <Route path="settings/organization" element={<OrganizationSettings />} />
           <Route path="settings/projects" element={<ProjectsSettings />} />
           <Route path="settings/account" element={<Account />} />
+          <Route path="settings/ai-apps" element={<AIApps />} />
         </Route>
         <Route path="*" element={<Shell />} />
       </Routes>
